@@ -236,3 +236,68 @@ button:
           command: "14"
           hold_secs: 1.5
 ```
+
+### Input Configuration Examples
+
+The following examples show exactly what to fill in for each scenario.
+
+---
+
+**Example 1 — HAP Input (e.g. HDMI port or CEC device)**
+
+Switch to the input on your TV and read the number from **1c. Current Identifier** before filling in.
+
+| Field | Value |
+|---|---|
+| 1. Apple TV | Off |
+| 1a. Input Name | `Apple TV` |
+| 1b. Command | `input_9` |
+| 1c. App Name | *(leave empty)* |
+| 1d. Input Type | `hap` |
+| 1d. HAP Identifier | `9` |
+
+---
+
+**Example 2 — Third-Party Remote Input (e.g. Sony Bravia integration)**
+
+Use when the TV requires a vendor-specific command that HAP alone can't send.
+
+| Field | Value |
+|---|---|
+| 1. Apple TV | Off |
+| 1a. Input Name | `Portal TV` |
+| 1b. Command | `Hdmi2` |
+| 1c. App Name | *(leave empty)* |
+| 1d. Input Type | `remote.bravia_kd_55xg9505` |
+| 1d. HAP Identifier | `3` |
+
+---
+
+**Example 3 — TV App via Third-Party Media Player (e.g. Bravia integration)**
+
+Use for launching apps on the TV directly via a Sony or other brand integration.
+
+| Field | Value |
+|---|---|
+| 1. Apple TV | Off |
+| 1a. Input Name | `Netflix` |
+| 1b. Command | *(leave empty)* |
+| 1c. App Name | `Netflix` |
+| 1d. Input Type | `media_player.bravia_kd_55xg9505` |
+| 1d. HAP Identifier | *(leave empty)* |
+
+---
+
+**Example 4 — Apple TV App (e.g. Apple TV integration)**
+
+Requires the Apple TV integration with Companion protocol paired. Toggle **1. Apple TV** ON before saving — this switches the command from `play_media` to `select_source` which is the only working method for Apple TV app launching.
+
+| Field | Value |
+|---|---|
+| 1. Apple TV | **On** |
+| 1a. Input Name | `Netflix on ATV` |
+| 1b. Command | *(leave empty)* |
+| 1c. App Name | `Netflix` |
+| 1d. Input Type | `media_player.ng_apple_tv` |
+| 1d. HAP Identifier | `9` |
+

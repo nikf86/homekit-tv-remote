@@ -1,10 +1,15 @@
 """Button entities for HomeKit TV Remote configuration."""
-# Version: 1.0.1
+# Version: 1.1.0
 #
 # CHANGES FROM 1.0.0:
 # - TestCommandButton now reads remote entity ID from hass.data[DOMAIN][entry_id]
-#   instead of hardcoding "remote.homekit_tv". This fixes the test command
-#   button when tv_name is anything other than "Homekit TV".
+#   instead of hardcoding "remote.homekit_tv".
+# CHANGES FROM 1.1.0:
+# - AddCustomInputButton now reads the AppleTVSwitch state from hass.data.
+#   When Apple TV switch is ON and command type is media_player, saves
+#   command_type = "media_player_source" instead of "media_player".
+#   media_player_source uses select_source instead of play_media in
+#   media_player.py _execute_input_command.
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -37,11 +42,7 @@ async def async_setup_entry(
 # ─── Reload HomeKit Button ─────────────────────────────────────────────────────
 
 class ReloadHomeKitButton(ButtonEntity):
-    """
-    Calls the homekit.reload service.
-    Must be pressed after Save Input / Delete Input to reconnect the
-    HomeKit Bridge to the updated media player entity.
-    """
+    """Calls the homekit.reload service."""
 
     def __init__(self, hass, config_entry):
         self.hass = hass
@@ -68,13 +69,7 @@ class ReloadHomeKitButton(ButtonEntity):
 # ─── Test Command Button ───────────────────────────────────────────────────────
 
 class TestCommandButton(ButtonEntity):
-    """
-    Reads the value typed in the "1a. Test Command" text entity and sends it
-    to the TV remote entity via remote.send_command.
-
-    Remote entity ID is read from hass.data (derived from tv_name in __init__.py)
-    rather than hardcoded, so it works with any tv_name entered during setup.
-    """
+    """Sends the test command text field value to the TV remote entity."""
 
     def __init__(self, hass, config_entry):
         self.hass = hass
@@ -91,13 +86,8 @@ class TestCommandButton(ButtonEntity):
         }
 
     async def async_press(self):
-        """
-        Read the test_command text entity value and send it to the remote entity.
-        Remote entity ID is looked up from hass.data to support any tv_name.
-        """
         entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
         remote_entity_id = entry_data.get("remote_entity", "remote.homekit_tv")
-
         text_entities = entry_data.get("text_entities", {})
         test_cmd = text_entities.get("test_command")
 
@@ -120,9 +110,12 @@ class TestCommandButton(ButtonEntity):
 
 class AddCustomInputButton(ButtonEntity):
     """
-    Reads the input name, command/app, type, and optional HAP identifier from
-    the text and select entities, constructs a new input dict, and appends it
-    to config_entry.options["custom_inputs"].
+    Reads all input fields and saves a new custom input to config_entry.options.
+
+    When the Apple TV switch (switch "1. Apple TV") is ON and the selected type
+    is a media_player entity, saves command_type = "media_player_source" instead
+    of "media_player". This causes media_player.py to use select_source instead
+    of play_media — the only working method for Apple TV app launching.
     """
 
     def __init__(self, hass, config_entry):
@@ -140,6 +133,7 @@ class AddCustomInputButton(ButtonEntity):
         entities = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
         text_entities = entities.get("text_entities", {})
         input_type = entities.get("input_type")
+        apple_tv_switch = entities.get("apple_tv_switch")
 
         input_name = text_entities.get("input_name")
         input_cmd = text_entities.get("input_command")
@@ -152,12 +146,19 @@ class AddCustomInputButton(ButtonEntity):
 
         selected_type = input_type.current_option
 
+        # Read Apple TV switch state — True means use select_source
+        use_apple_tv_mode = apple_tv_switch._attr_is_on if apple_tv_switch else False
+
         if input_app and input_app.native_value:
             if not selected_type.startswith("media_player."):
-                _LOGGER.error("App launching requires selecting a media_player entity in Type (3d)")
+                _LOGGER.error("App launching requires selecting a media_player entity in Type")
                 return
-            full_command = f"{selected_type}|{input_app.native_value}|app"
-            command_type = "media_player"
+            full_command = f"{selected_type}|{input_app.native_value}"
+            # Use media_player_source if Apple TV switch is ON, else media_player
+            command_type = "media_player_source" if use_apple_tv_mode else "media_player"
+            # Append |app suffix only for standard play_media path
+            if command_type == "media_player":
+                full_command = f"{full_command}|app"
 
         elif input_cmd and input_cmd.native_value:
             if selected_type == "hap":
@@ -170,7 +171,7 @@ class AddCustomInputButton(ButtonEntity):
                 _LOGGER.error("For commands, Type must be 'hap' or a remote entity")
                 return
         else:
-            _LOGGER.error("Either Command (3b) or App Name (3c) must be filled")
+            _LOGGER.error("Either Command (1b) or App Name (1c) must be filled")
             return
 
         new_input = {
@@ -179,7 +180,7 @@ class AddCustomInputButton(ButtonEntity):
             "command": full_command
         }
 
-        if command_type in ("remote", "media_player") and input_identifier and input_identifier.native_value:
+        if command_type in ("remote", "media_player", "media_player_source") and input_identifier and input_identifier.native_value:
             try:
                 new_input["identifier"] = int(input_identifier.native_value)
             except ValueError:
@@ -215,7 +216,6 @@ class DeleteCustomInputButton(ButtonEntity):
 
     async def async_press(self):
         inputs = list(self._config_entry.options.get("custom_inputs", []))
-
         if inputs:
             deleted = inputs.pop()
             self.hass.config_entries.async_update_entry(

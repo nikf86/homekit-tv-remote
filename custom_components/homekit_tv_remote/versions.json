@@ -1,11 +1,11 @@
 {
-  "__init__.py": "1.0.0",
-  "button.py": "1.0.0",
+  "__init__.py": "1.0.1",
+  "button.py": "1.1.0",
   "config_flow.py": "1.0.0",
-  "media_player.py": "1.0.0",
+  "media_player.py": "1.1.0",
   "remote.py": "1.0.0",
   "select.py": "1.0.0",
   "sensor.py": "1.0.0",
-  "switch.py": "1.0.0",
-  "text.py": "1.0.0"
+  "switch.py": "1.1.0",
+  "text.py": "1.0.1"
 }

@@ -1,25 +1,13 @@
-"""Switch entities for debug options."""
-# Version: 1.0.0
+"""Switch entities for debug options and input configuration."""
+# Version: 1.1.0
 #
-# ROLE IN INTEGRATION:
-# Provides two toggle switches that enable/disable debug logging in remote.py
-# WITHOUT triggering an integration reload.
-#
-# The debug flags (_debug_listen, _debug_send) live on the TVRemote instance
-# in remote.py. When toggled, these switches:
-#   1. Persist the new value to config_entry.options (so it survives reloads)
-#   2. Directly flip the flag on the live TVRemote instance via remote_entity_ref
-#      stored in hass.data by remote.py — no reload required
-#
-# DebugListenSwitch: enables [HOMEKIT_TV_LISTEN] log lines in remote.py
-#   (subscription events, poll updates, ActiveIdentifier changes)
-# DebugSendSwitch:   enables [HOMEKIT_TV_SEND] log lines in remote.py
-#   (RemoteKey, Volume, Mute, Input switch commands sent to TV)
-#
-# NOTE: async_update_entry IS called here (unlike select.py) because toggling
-# debug should persist across reloads. However, this also triggers the
-# update_listener in __init__.py → async_reload_entry. This is acceptable
-# because debug toggles are rarely changed.
+# CHANGES FROM 1.0.0:
+# - Added AppleTVSwitch: when ON, the Save Input button uses
+#   media_player.select_source instead of media_player.play_media
+#   when saving a media_player type input. Required for Apple TV
+#   integration which does not support play_media for app launching.
+#   State is stored in hass.data (in-memory only) — resets to OFF on reload
+#   since it is a per-input configuration toggle, not a persistent setting.
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
@@ -37,12 +25,62 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create both debug switch entities."""
+    """Create debug switches and the Apple TV switch."""
+    apple_tv_switch = AppleTVSwitch(hass, entry)
+
+    # Store reference in hass.data so button.py can read its state
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault(entry.entry_id, {})
+    hass.data[DOMAIN][entry.entry_id]["apple_tv_switch"] = apple_tv_switch
+
     switches = [
         DebugListenSwitch(hass, entry),
         DebugSendSwitch(hass, entry),
+        apple_tv_switch,
     ]
     async_add_entities(switches)
+
+
+# ─── Apple TV Switch ───────────────────────────────────────────────────────────
+
+class AppleTVSwitch(SwitchEntity):
+    """
+    Toggle Apple TV app launching mode.
+
+    OFF (default): media_player type inputs use media_player.play_media
+    ON:            media_player type inputs use media_player.select_source
+
+    Use ON when the selected media_player entity is an Apple TV.
+    select_source is the only working method for launching apps on Apple TV.
+
+    State is in-memory only — resets to OFF on every integration reload.
+    Read by AddCustomInputButton in button.py when saving an input.
+    Category: CONFIG (shown in the Configuration section of the device page)
+    """
+
+    _attr_should_poll = False
+
+    def __init__(self, hass, config_entry):
+        self.hass = hass
+        self._config_entry = config_entry
+        self._attr_unique_id = f"{config_entry.entry_id}_apple_tv_mode"
+        self._attr_name = "1. Apple TV"
+        self._attr_icon = "mdi:apple"
+        self._attr_is_on = False
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, config_entry.entry_id)},
+        }
+
+    async def async_turn_on(self, **kwargs):
+        """Enable Apple TV mode — select_source will be used for media_player inputs."""
+        self._attr_is_on = True
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs):
+        """Disable Apple TV mode — play_media will be used for media_player inputs."""
+        self._attr_is_on = False
+        self.async_write_ha_state()
 
 
 # ─── Debug Listen Switch ───────────────────────────────────────────────────────
@@ -50,13 +88,8 @@ async def async_setup_entry(
 class DebugListenSwitch(SwitchEntity):
     """
     Toggle [HOMEKIT_TV_LISTEN] debug logging in remote.py.
-    
-    When ON: remote.py logs every ActiveIdentifier poll update,
-    push subscription event, and source change at WARNING level
-    (so they appear without enabling debug mode globally).
-    
     Initial state is read from config_entry.options["debug_listen"].
-    Category: DIAGNOSTIC (shown in the Diagnostic section of the device page)
+    Category: DIAGNOSTIC
     """
 
     def __init__(self, hass, config_entry):
@@ -65,7 +98,6 @@ class DebugListenSwitch(SwitchEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_debug_listen"
         self._attr_name = "Debug Listen"
         self._attr_icon = "mdi:bug"
-        # Read persisted state from options (False if never set)
         self._attr_is_on = config_entry.options.get("debug_listen", False)
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_device_info = {
@@ -73,21 +105,12 @@ class DebugListenSwitch(SwitchEntity):
         }
 
     async def async_turn_on(self, **kwargs):
-        """
-        Enable listen debug logging:
-        1. Persist True to config_entry.options (survives reloads)
-        2. Update local state and write to HA
-        3. Flip _debug_listen on the live TVRemote instance directly
-           (avoids needing a reload to take effect immediately)
-        """
         self.hass.config_entries.async_update_entry(
             self._config_entry,
             options={**self._config_entry.options, "debug_listen": True}
         )
         self._attr_is_on = True
         self.async_write_ha_state()
-
-        # Update the live remote entity flag without waiting for reload
         remote_ref = (
             self.hass.data.get(DOMAIN, {})
             .get(self._config_entry.entry_id, {})
@@ -97,19 +120,12 @@ class DebugListenSwitch(SwitchEntity):
             remote_ref._debug_listen = True
 
     async def async_turn_off(self, **kwargs):
-        """
-        Disable listen debug logging:
-        1. Persist False to config_entry.options
-        2. Update local state and write to HA
-        3. Flip _debug_listen on the live TVRemote instance directly
-        """
         self.hass.config_entries.async_update_entry(
             self._config_entry,
             options={**self._config_entry.options, "debug_listen": False}
         )
         self._attr_is_on = False
         self.async_write_ha_state()
-
         remote_ref = (
             self.hass.data.get(DOMAIN, {})
             .get(self._config_entry.entry_id, {})
@@ -124,12 +140,8 @@ class DebugListenSwitch(SwitchEntity):
 class DebugSendSwitch(SwitchEntity):
     """
     Toggle [HOMEKIT_TV_SEND] debug logging in remote.py.
-    
-    When ON: remote.py logs every command sent to the TV at WARNING level:
-    RemoteKey values, Volume directions, Mute toggles, Input switches.
-    
     Initial state is read from config_entry.options["debug_send"].
-    Category: DIAGNOSTIC (shown in the Diagnostic section of the device page)
+    Category: DIAGNOSTIC
     """
 
     def __init__(self, hass, config_entry):
@@ -138,7 +150,6 @@ class DebugSendSwitch(SwitchEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_debug_send"
         self._attr_name = "Debug Send"
         self._attr_icon = "mdi:bug"
-        # Read persisted state from options (False if never set)
         self._attr_is_on = config_entry.options.get("debug_send", False)
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_device_info = {
@@ -146,19 +157,12 @@ class DebugSendSwitch(SwitchEntity):
         }
 
     async def async_turn_on(self, **kwargs):
-        """
-        Enable send debug logging:
-        1. Persist True to config_entry.options
-        2. Update local state and write to HA
-        3. Flip _debug_send on the live TVRemote instance directly
-        """
         self.hass.config_entries.async_update_entry(
             self._config_entry,
             options={**self._config_entry.options, "debug_send": True}
         )
         self._attr_is_on = True
         self.async_write_ha_state()
-
         remote_ref = (
             self.hass.data.get(DOMAIN, {})
             .get(self._config_entry.entry_id, {})
@@ -168,19 +172,12 @@ class DebugSendSwitch(SwitchEntity):
             remote_ref._debug_send = True
 
     async def async_turn_off(self, **kwargs):
-        """
-        Disable send debug logging:
-        1. Persist False to config_entry.options
-        2. Update local state and write to HA
-        3. Flip _debug_send on the live TVRemote instance directly
-        """
         self.hass.config_entries.async_update_entry(
             self._config_entry,
             options={**self._config_entry.options, "debug_send": False}
         )
         self._attr_is_on = False
         self.async_write_ha_state()
-
         remote_ref = (
             self.hass.data.get(DOMAIN, {})
             .get(self._config_entry.entry_id, {})
