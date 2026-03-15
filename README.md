@@ -1,5 +1,7 @@
 # HomeKit TV Remote
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+
 The first Home Assistant integration to control a TV directly over the HomeKit Accessory Protocol (HAP). Rather than relying on vendor-specific IP remote protocols, it communicates with the TV the same way Apple devices do — over HAP, using the existing HomeKit pairing. This gives you a native remote entity, full iOS/iPadOS remote widget support, and flexible input and app switching with per-input HomeKit visibility control.
 
 ---
@@ -377,3 +379,11 @@ button:
 - Sony KD-55XG9505
 - Home Assistant 2026.02
 - iOS 26.3 / iPadOS 26.3
+
+---
+
+## Say Thank You
+
+If this integration is useful to you, a small donation is always appreciated.
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&logoColor=white)](https://www.paypal.com/donate?business=nikfam86%40gmail.com&item_name=HomeKit+TV+Remote)
