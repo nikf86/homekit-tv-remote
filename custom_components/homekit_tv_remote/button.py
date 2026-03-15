@@ -264,7 +264,7 @@ class TestCommandButton(ButtonEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_test_command"
-        self._attr_name = "1e. Test Command"
+        self._attr_name = "1f. Test Command"
         self._attr_icon = "mdi:test-tube"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
@@ -322,7 +322,7 @@ class AddCustomInputButton(ButtonEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_add_input"
-        self._attr_name = "1f. Save Input"
+        self._attr_name = "1g. Save Input"
         self._attr_icon = "mdi:television"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
@@ -395,7 +395,7 @@ class DeleteCustomInputButton(ButtonEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_delete_input"
-        self._attr_name = "1g. Delete Last Input"
+        self._attr_name = "1h. Delete Last Input"
         self._attr_icon = "mdi:delete"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {

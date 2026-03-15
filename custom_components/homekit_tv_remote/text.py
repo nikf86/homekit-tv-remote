@@ -49,7 +49,7 @@ async def async_setup_entry(
                          "1c. App Name (media_player — or leave empty for command)",
                          EntityCategory.CONFIG),
         ConfigTextEntity(hass, entry, "hap_identifier",
-                         "1d. HAP Identifier (for remote/media_player only)",
+                         "1e. HAP Identifier (for remote/media_player only)",
                          EntityCategory.CONFIG),
         # Read-only display of current TV input — now CONFIG so it shows
         # in the Configuration section alongside the other input fields.
@@ -109,7 +109,7 @@ class CurrentIdentifierTextEntity(TextEntity):
     Placed in the Configuration section (EntityCategory.CONFIG) so the user
     can read the current input number while filling in the HAP Identifier
     field — without having to open the Diagnostics section separately.
-    Named "1g. Current Identifier" to sit after Save/Delete in the list.
+    Named "1i. Current Identifier" to sit after Save/Delete in the list.
     """
 
     _attr_should_poll = False
@@ -119,7 +119,7 @@ class CurrentIdentifierTextEntity(TextEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_current_identifier_text"
-        self._attr_name = "1g. Current Identifier"
+        self._attr_name = "1i. Current Identifier"
         self._attr_icon = "mdi:television-play"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
