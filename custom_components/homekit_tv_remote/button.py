@@ -223,7 +223,7 @@ class ReloadHomeKitButton(ButtonEntity):
             "identifiers": {(DOMAIN, config_entry.entry_id)},
             "name": "HomeKit TV Remote",
             "manufacturer": "HomeKit TV Remote",
-            "model": "v2.0",
+            "model": "HomeKit TV Remote Control",
         }
 
     async def async_press(self):
