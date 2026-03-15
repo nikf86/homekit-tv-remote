@@ -50,6 +50,7 @@ homekit:
 
 Restart HA and pair the new accessory in Apple Home.
 
+
 ---
 
 ## Adding Inputs
@@ -74,7 +75,7 @@ Everything is in the **Configuration section** of the device page. The workflow 
 | **1i. Current Identifier** | Live read-out of the TV's current input and its HAP number |
 | **Include: \<name\>** | Controls whether this input appears in HomeKit and the cycle |
 | **Next Saved Input** | Cycles to the next enabled input — same as the iOS ⓘ Info button |
-| **Reload HomeKit YAML** | Re-registers the TV with HomeKit Bridge after adding/removing inputs |
+| **Reload HomeKit YAML** | Re-registers the TV with HomeKit Bridge after adding/removing inputs. After reloading, force-close and reopen the Apple Home app on your iPhone/iPad for the changes to appear. |
 
 ### Apple TV specifics
 
