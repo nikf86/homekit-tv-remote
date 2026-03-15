@@ -1,0 +1,13 @@
+{
+  "domain": "homekit_tv_remote",
+  "name": "HomeKit TV Remote",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [
+    "homekit_controller"
+  ],
+  "documentation": "",
+  "iot_class": "local_push",
+  "requirements": [],
+  "version": "1.0.0"
+}
