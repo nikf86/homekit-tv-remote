@@ -32,6 +32,8 @@ All remote commands are sent directly over HAP, bypassing the TV's vendor IP pro
 
 | Command | Function | Notes |
 |---|---|---|
+| — | Power On | Use `remote.turn_on` — see [Basic Controls](#basic-controls) |
+| — | Power Off | Use `remote.turn_off` — see [Basic Controls](#basic-controls) |
 | `0` | Rewind | |
 | `1` | Fast Forward | |
 | `2` | Next Track | |
