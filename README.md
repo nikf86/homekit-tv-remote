@@ -8,12 +8,10 @@ Control your TV directly over HAP — the same protocol Apple devices use — gi
 
 ## What It Does
 
-- **Native remote control** — D-pad, back, home, play/pause, volume, mute, input switching — all over HAP, faster than vendor IP protocols
-- **iOS/iPadOS remote widget** — appears in Control Center just like an Apple TV
-- **Flexible input & app switching** — save any input: HDMI, CEC, third-party remotes (e.g. Bravia), or apps on any media player entity (including Apple TV)
-- **Volume & mute in HA** — volume up/down and mute appear directly in the media player controls card
-- **Per-input HomeKit visibility** — choose exactly which inputs appear in Apple Home and the cycling list
-- **Test before saving** — fire any command from the config fields to verify it works before committing
+- **Full remote control over HAP** — D-pad, back, home, play/pause, volume, mute, and input switching, all sent directly over the HomeKit Accessory Protocol. No vendor app, no IP remote — just the same channel Apple devices use, with the priority that comes with it.
+- **iOS/iPadOS remote widget with input cycling** — your TV appears as a Television accessory in Apple Home, unlocking the native remote widget in Control Center. The ⓘ Info button cycles through your saved inputs in order. You control exactly which inputs are visible in Apple Home and which are included in the cycle — per input, with a simple toggle.
+- **Any input, any integration** — save HDMI and CEC inputs directly via HAP, or connect any third-party remote or media player entity (Bravia, Apple TV, and others) to switch sources and launch apps from the same unified list.
+- **Test before saving** — fire any command from the configuration fields before committing it, so you know it works before it goes into your setup.
 
 ---
 
