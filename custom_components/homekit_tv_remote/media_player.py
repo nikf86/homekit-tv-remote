@@ -1,5 +1,12 @@
 """Media Player platform for HomeKit TV Remote - HomeKit Bridge interface layer."""
-# Version: 1.2.0
+# Version: 1.3.0
+#
+# CHANGES FROM 1.3.0:
+# - Fixed media_player_source execution when Apple TV Input switch was ON.
+#   button.py saves a 3-segment command: "media_player.entity|app_name|input_N".
+#   Old split("|", 1) passed "app_name|input_N" as the source — broken.
+#   Now: if 3 segments, sends HAP input switch first, then select_source with
+#   just the app name. Falls back to 2-segment if no input switch segment.
 #
 # CHANGES FROM 1.0.0:
 # - Remote entity ID and media_player entity ID are now read from
@@ -310,21 +317,56 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
                     )
 
         elif command_type == "media_player_source":
-            # Apple TV path — uses select_source instead of play_media
-            # Command format: "media_player.entity_id|app_name"
-            if "|" in command:
-                parts = command.split("|", 1)
-                if len(parts) == 2:
-                    entity_id, source = parts
-                    await self.hass.services.async_call(
-                        "media_player",
-                        "select_source",
-                        {
-                            "entity_id": entity_id.strip(),
-                            "source": source.strip()
-                        },
-                        blocking=True
-                    )
+            # Apple TV path — uses select_source instead of play_media.
+            #
+            # Two possible formats saved by button.py:
+            #   2 segments: "media_player.entity_id|app_name"
+            #     → Apple TV Input switch was OFF — just launch the app.
+            #   3 segments: "media_player.entity_id|app_name|input_N"
+            #     → Apple TV Input switch was ON — switch the TV HDMI input
+            #       to input_N first, then launch the app.
+            #
+            # The HAP input switch is sent to the integration's own remote entity
+            # (self._hap_remote_entity) since input_N is a HAP ActiveIdentifier
+            # command, not an Apple TV command. Both commands are fired immediately
+            # with no delay — they go to two separate devices (TV and Apple TV)
+            # so there is no conflict or sequencing dependency.
+            if "|" not in command:
+                return
+            parts = command.split("|")
+            if len(parts) == 3:
+                # 3-segment: switch HDMI input first, then launch app
+                entity_id, app_name, hap_input_cmd = parts
+                await self.hass.services.async_call(
+                    "remote",
+                    "send_command",
+                    {
+                        "entity_id": self._hap_remote_entity,
+                        "command": hap_input_cmd.strip()
+                    },
+                    blocking=True
+                )
+                await self.hass.services.async_call(
+                    "media_player",
+                    "select_source",
+                    {
+                        "entity_id": entity_id.strip(),
+                        "source": app_name.strip()
+                    },
+                    blocking=True
+                )
+            elif len(parts) == 2:
+                # 2-segment: just launch the app
+                entity_id, app_name = parts
+                await self.hass.services.async_call(
+                    "media_player",
+                    "select_source",
+                    {
+                        "entity_id": entity_id.strip(),
+                        "source": app_name.strip()
+                    },
+                    blocking=True
+                )
 
     # ─── Info Button: Input Cycling ────────────────────────────────────────────
 

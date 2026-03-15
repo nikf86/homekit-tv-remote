@@ -98,11 +98,16 @@ Switch to the input on your TV, read its number from **1i. Current Identifier**,
 **Third-party remote (e.g. Bravia)**
 `1b. Command` = `Hdmi2` · `1d. Input Type` = `remote.bravia_kd_55xg9505` · `1e. HAP Identifier` = `3`
 
-**App via media player (e.g. Bravia Netflix)**
+**App from a third-party media player (e.g. Bravia Netflix)**
 `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.bravia_kd_55xg9505`
 
-**Apple TV app**
-`1. Apple TV App` = On · `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.ng_apple_tv` · `1e. HAP Identifier` = `9`
+**App from Apple TV — app only**
+Use this when the TV is already on the Apple TV input, or you handle input switching separately.
+`1. Apple TV App` = On · `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.ng_apple_tv`
+
+**App from Apple TV — with automatic HDMI input switching**
+Use this to switch the TV to the Apple TV HDMI port and launch the app in one step. Set **1e. HAP Identifier** to the number your TV reports for the Apple TV port (read from **1i. Current Identifier** while on that input).
+`1. Apple TV App` = On · `1. Apple TV Input` = On · `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.ng_apple_tv` · `1e. HAP Identifier` = `8`
 
 > Apple TV app names are case-sensitive. The easiest way to find them: **Developer Tools → Actions → `media_player.select_source`** → pick your Apple TV entity — the source list shows every installed app with the exact string.
 
