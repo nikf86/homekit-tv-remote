@@ -1,5 +1,5 @@
 """Button entities for HomeKit TV Remote configuration."""
-# Version: 1.4.0
+# Version: 1.5.0
 #
 # 1.0.0 — Initial release. ReloadHomeKitButton, TestCommandButton (reads remote
 #         entity ID from hass.data), AddCustomInputButton, DeleteCustomInputButton.
@@ -21,6 +21,20 @@
 # 1.4.0 — NextSavedInputButton now logs a specific warning when no inputs are
 #         enabled via their HomeKitInputSwitch, matching the updated message
 #         from _cycle_custom_inputs() in media_player.py 1.4.0.
+#
+# 1.5.0 — TestCommandButton completely rewritten. Was DIAGNOSTIC and only fired
+#         raw HAP commands via a separate test_command text field.
+#         Now CONFIG, named "1e. Test Command", reads the same fields that
+#         AddCustomInputButton uses (1b Command, 1c App Name, 1d Input Type,
+#         Apple TV App switch, Apple TV Input switch) and executes the command
+#         immediately without saving — supporting all command types:
+#           hap       → remote.send_command on the HAP remote entity
+#           remote    → remote.send_command on any remote.* entity
+#           media_player       → media_player.play_media
+#           media_player_source → media_player.select_source (Apple TV)
+#         The separate test_command text entity in text.py has been removed.
+#         Save Input renumbered to "1f. Save Input", Delete to "1g. Delete Last
+#         Input" to make room for Test Command at 1e.
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -31,6 +45,148 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "homekit_tv_remote"
+
+
+# ─── Shared helpers ────────────────────────────────────────────────────────────
+
+def _resolve_command(text_entities, input_type_entity, apple_tv_app_switch, apple_tv_input_switch):
+    """
+    Shared logic used by both TestCommandButton and AddCustomInputButton.
+
+    Reads the config text fields and switch states to produce a
+    (command_type, full_command) tuple, or raises ValueError.
+
+    Mirrors the field-reading logic in AddCustomInputButton.async_press so
+    both buttons behave identically — the only difference is Test does not save.
+
+    Returns:
+        (command_type: str, full_command: str)
+    Raises:
+        ValueError with a human-readable message on invalid input.
+    """
+    input_cmd  = text_entities.get("input_command")
+    input_app  = text_entities.get("input_app")
+    input_identifier = text_entities.get("hap_identifier")
+
+    selected_type     = input_type_entity.current_option if input_type_entity else "hap"
+    use_apple_tv_app  = apple_tv_app_switch._attr_is_on if apple_tv_app_switch else False
+    use_apple_tv_input= apple_tv_input_switch._attr_is_on if apple_tv_input_switch else False
+
+    if input_app and input_app.native_value:
+        # ── App launch path ────────────────────────────────────────────────────
+        if not selected_type.startswith("media_player."):
+            raise ValueError(
+                "App launching requires a media_player.* entity in Input Type"
+            )
+        command_type = "media_player_source" if use_apple_tv_app else "media_player"
+
+        if command_type == "media_player_source":
+            full_command = f"{selected_type}|{input_app.native_value}"
+            if use_apple_tv_input and input_identifier and input_identifier.native_value:
+                try:
+                    hap_id = int(input_identifier.native_value)
+                    full_command = f"{full_command}|input_{hap_id}"
+                except ValueError:
+                    raise ValueError(
+                        f"HAP Identifier must be an integer, got: {input_identifier.native_value}"
+                    )
+        else:
+            full_command = f"{selected_type}|{input_app.native_value}|app"
+
+    elif input_cmd and input_cmd.native_value:
+        # ── Command path ───────────────────────────────────────────────────────
+        if selected_type == "hap":
+            full_command = input_cmd.native_value
+            command_type = "hap"
+        elif selected_type.startswith("remote."):
+            full_command = f"{selected_type}.{input_cmd.native_value}"
+            command_type = "remote"
+        else:
+            raise ValueError(
+                "For commands, Input Type must be 'hap' or a remote.* entity"
+            )
+    else:
+        raise ValueError(
+            "Fill in either 1b Command (for HAP/remote) or 1c App Name (for media_player)"
+        )
+
+    return command_type, full_command
+
+
+async def _execute_command(hass, hap_remote_entity_id, command_type, full_command):
+    """
+    Execute a resolved command immediately without saving.
+
+    Mirrors the dispatch logic in media_player.py _execute_input_command
+    so that testing produces exactly the same behaviour as a real input switch.
+
+    command_type="hap":
+        remote.send_command on hap_remote_entity_id, command = full_command
+
+    command_type="remote":
+        Parses "remote.entity_id.CommandName"
+        → remote.send_command on the named remote entity
+
+    command_type="media_player":
+        Parses "media_player.entity_id|content_id|app"
+        → media_player.play_media
+
+    command_type="media_player_source":
+        Parses "media_player.entity_id|app_name[|input_N]"
+        → media_player.select_source (ignores optional |input_N for testing)
+    """
+    if command_type == "hap":
+        await hass.services.async_call(
+            "remote", "send_command",
+            {"entity_id": hap_remote_entity_id, "command": full_command},
+            blocking=True
+        )
+
+    elif command_type == "remote":
+        # format: "remote.entity_id.CommandName"
+        parts = full_command.rsplit(".", 1)
+        if len(parts) == 2:
+            entity_id, cmd = parts
+            await hass.services.async_call(
+                "remote", "send_command",
+                {"entity_id": entity_id, "command": cmd},
+                blocking=True
+            )
+        else:
+            raise ValueError(f"Cannot parse remote command: {full_command}")
+
+    elif command_type == "media_player":
+        # format: "media_player.entity_id|content_id|content_type"
+        parts = full_command.split("|")
+        if len(parts) == 3:
+            entity_id, content_id, content_type = parts
+            await hass.services.async_call(
+                "media_player", "play_media",
+                {
+                    "entity_id": entity_id.strip(),
+                    "media_content_id": content_id.strip(),
+                    "media_content_type": content_type.strip(),
+                },
+                blocking=True
+            )
+        else:
+            raise ValueError(f"Cannot parse media_player command: {full_command}")
+
+    elif command_type == "media_player_source":
+        # format: "media_player.entity_id|app_name" or
+        #         "media_player.entity_id|app_name|input_N"
+        # For testing, use only the first two segments (ignore HDMI switch segment)
+        parts = full_command.split("|")
+        if len(parts) >= 2:
+            entity_id = parts[0]
+            source    = parts[1]
+            await hass.services.async_call(
+                "media_player", "select_source",
+                {"entity_id": entity_id.strip(), "source": source.strip()},
+                blocking=True
+            )
+        else:
+            raise ValueError(f"Cannot parse media_player_source command: {full_command}")
 
 
 # ─── Platform Setup ────────────────────────────────────────────────────────────
@@ -81,41 +237,63 @@ class ReloadHomeKitButton(ButtonEntity):
 # ─── Test Command Button ───────────────────────────────────────────────────────
 
 class TestCommandButton(ButtonEntity):
-    """Sends the test command text field value to the TV remote entity."""
+    """
+    Execute the command described by the current config fields WITHOUT saving.
+
+    Reads the same fields as AddCustomInputButton:
+      1b. Command  (for hap / remote inputs)
+      1c. App Name (for media_player inputs)
+      1d. Input Type (select entity — hap / remote.* / media_player.*)
+      1. Apple TV App switch
+      1. Apple TV Input switch
+
+    Supports all four command types:
+      hap               → remote.send_command on the integration's HAP remote
+      remote            → remote.send_command on any remote.* entity
+      media_player      → media_player.play_media
+      media_player_source → media_player.select_source (Apple TV)
+
+    The 1a. Input Name field is intentionally NOT required — you can test a
+    command before deciding on a name.
+
+    Category: CONFIG — appears in the Configuration section alongside the
+    other input fields, not in a separate Diagnostics section.
+    """
 
     def __init__(self, hass, config_entry):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_test_command"
-        self._attr_name = "1b. Send Test Command"
+        self._attr_name = "1e. Test Command"
         self._attr_icon = "mdi:test-tube"
-        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
             "identifiers": {(DOMAIN, config_entry.entry_id)},
-            "name": "HomeKit TV Remote",
-            "manufacturer": "HomeKit TV Remote",
-            "model": "v2.0",
         }
 
     async def async_press(self):
         entry_data = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        remote_entity_id = entry_data.get("remote_entity", "remote.homekit_tv")
-        text_entities = entry_data.get("text_entities", {})
-        test_cmd = text_entities.get("test_command")
+        text_entities      = entry_data.get("text_entities", {})
+        input_type         = entry_data.get("input_type")
+        apple_tv_app_sw    = entry_data.get("apple_tv_switch")
+        apple_tv_input_sw  = entry_data.get("apple_tv_input_switch")
+        hap_remote_entity  = entry_data.get("remote_entity", "remote.homekit_tv")
 
-        if test_cmd and test_cmd.native_value:
-            try:
-                await self.hass.services.async_call(
-                    "remote",
-                    "send_command",
-                    {"entity_id": remote_entity_id, "command": test_cmd.native_value},
-                    blocking=True
-                )
-                _LOGGER.info("Tested HAP command: %s", test_cmd.native_value)
-            except Exception as e:
-                _LOGGER.error("Test failed: %s", e)
-        else:
-            _LOGGER.error("Test command not set")
+        try:
+            command_type, full_command = _resolve_command(
+                text_entities, input_type, apple_tv_app_sw, apple_tv_input_sw
+            )
+        except ValueError as e:
+            _LOGGER.error("Test Command: %s", e)
+            return
+
+        try:
+            await _execute_command(self.hass, hap_remote_entity, command_type, full_command)
+            _LOGGER.info(
+                "Test Command executed: type=%s command=%s", command_type, full_command
+            )
+        except Exception as e:
+            _LOGGER.error("Test Command failed: %s", e)
 
 
 # ─── Add Custom Input Button ───────────────────────────────────────────────────
@@ -144,7 +322,7 @@ class AddCustomInputButton(ButtonEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_add_input"
-        self._attr_name = "1e. Save Input"
+        self._attr_name = "1f. Save Input"
         self._attr_icon = "mdi:television"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
@@ -152,84 +330,46 @@ class AddCustomInputButton(ButtonEntity):
         }
 
     async def async_press(self):
-        entities = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
-        text_entities = entities.get("text_entities", {})
-        input_type = entities.get("input_type")
-        apple_tv_app_switch = entities.get("apple_tv_switch")         # "1. Apple TV App"
-        apple_tv_input_switch = entities.get("apple_tv_input_switch") # "1. Apple TV Input"
+        entities          = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id, {})
+        text_entities     = entities.get("text_entities", {})
+        input_type        = entities.get("input_type")
+        apple_tv_app_sw   = entities.get("apple_tv_switch")
+        apple_tv_input_sw = entities.get("apple_tv_input_switch")
 
-        input_name = text_entities.get("input_name")
-        input_cmd = text_entities.get("input_command")
-        input_app = text_entities.get("input_app")
+        input_name       = text_entities.get("input_name")
         input_identifier = text_entities.get("hap_identifier")
 
         if not input_name or not input_name.native_value or not input_type:
-            _LOGGER.error("Input name or type not set")
+            _LOGGER.error("Save Input: Input name (1a) or Input Type (1d) not set")
             return
 
-        selected_type = input_type.current_option
-
-        # Read switch states
-        use_apple_tv_app_mode = apple_tv_app_switch._attr_is_on if apple_tv_app_switch else False
-        use_apple_tv_input = apple_tv_input_switch._attr_is_on if apple_tv_input_switch else False
-
-        if input_app and input_app.native_value:
-            if not selected_type.startswith("media_player."):
-                _LOGGER.error("App launching requires selecting a media_player entity in Type")
-                return
-
-            command_type = "media_player_source" if use_apple_tv_app_mode else "media_player"
-
-            if command_type == "media_player_source":
-                full_command = f"{selected_type}|{input_app.native_value}"
-
-                if use_apple_tv_input and input_identifier and input_identifier.native_value:
-                    try:
-                        hap_id = int(input_identifier.native_value)
-                        full_command = f"{full_command}|input_{hap_id}"
-                        _LOGGER.debug(
-                            "Apple TV Input switch ON — embedding HAP input switch: input_%s",
-                            hap_id
-                        )
-                    except ValueError:
-                        _LOGGER.warning(
-                            "Apple TV Input switch is ON but HAP Identifier is not an integer (%s) "
-                            "— saving without HDMI switching segment",
-                            input_identifier.native_value
-                        )
-                elif use_apple_tv_input:
-                    _LOGGER.warning(
-                        "Apple TV Input switch is ON but HAP Identifier is empty "
-                        "— saving without HDMI switching segment"
-                    )
-            else:
-                full_command = f"{selected_type}|{input_app.native_value}|app"
-
-        elif input_cmd and input_cmd.native_value:
-            if selected_type == "hap":
-                full_command = input_cmd.native_value
-                command_type = "hap"
-            elif selected_type.startswith("remote."):
-                full_command = f"{selected_type}.{input_cmd.native_value}"
-                command_type = "remote"
-            else:
-                _LOGGER.error("For commands, Type must be 'hap' or a remote entity")
-                return
-        else:
-            _LOGGER.error("Either Command (1b) or App Name (1c) must be filled")
+        try:
+            command_type, full_command = _resolve_command(
+                text_entities, input_type, apple_tv_app_sw, apple_tv_input_sw
+            )
+        except ValueError as e:
+            _LOGGER.error("Save Input: %s", e)
             return
 
         new_input = {
             "name": input_name.native_value,
             "command_type": command_type,
-            "command": full_command
+            "command": full_command,
         }
 
-        if command_type in ("remote", "media_player", "media_player_source") and input_identifier and input_identifier.native_value:
+        # Persist HAP identifier for source-name resolution in remote.py
+        if (
+            command_type in ("remote", "media_player", "media_player_source")
+            and input_identifier
+            and input_identifier.native_value
+        ):
             try:
                 new_input["identifier"] = int(input_identifier.native_value)
             except ValueError:
-                _LOGGER.error("HAP Identifier must be an integer, got: %s", input_identifier.native_value)
+                _LOGGER.error(
+                    "Save Input: HAP Identifier must be an integer, got: %s",
+                    input_identifier.native_value
+                )
                 return
 
         inputs = list(self._config_entry.options.get("custom_inputs", []))
@@ -241,7 +381,7 @@ class AddCustomInputButton(ButtonEntity):
         )
 
         _LOGGER.info(
-            "Added input: %s (%s: %s) — enable its 'Include: %s' switch to add it to HomeKit",
+            "Saved input: %s (%s: %s) — enable 'Include: %s' switch to add to HomeKit",
             input_name.native_value, command_type, full_command, input_name.native_value
         )
 
@@ -255,7 +395,7 @@ class DeleteCustomInputButton(ButtonEntity):
         self.hass = hass
         self._config_entry = config_entry
         self._attr_unique_id = f"{config_entry.entry_id}_delete_input"
-        self._attr_name = "1f. Delete Last Input"
+        self._attr_name = "1g. Delete Last Input"
         self._attr_icon = "mdi:delete"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_device_info = {
