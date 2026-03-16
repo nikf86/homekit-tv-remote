@@ -1,37 +1,5 @@
-"""Switch entities for debug options and input configuration."""
+"""Switch entities — debug toggles, Apple TV save-time flags, and per-input Include switches."""
 # Version: 1.3.1
-#
-# 1.0.0 — Initial release.
-#         DebugListenSwitch and DebugSendSwitch toggle HOMEKIT_TV_LISTEN /
-#         HOMEKIT_TV_SEND log tags live without restart. State persisted to
-#         config_entry.options. AppleTVSwitch (1. Apple TV) selects
-#         select_source vs play_media for media_player inputs (in-memory only).
-#
-# 1.1.0 — AppleTVSwitch renamed to AppleTVAppSwitch, label changed from
-#         "1. Apple TV" to "1. Apple TV App". Added AppleTVInputSwitch
-#         ("1. Apple TV Input"): when ON at save time, button.py embeds the
-#         HAP identifier as |input_N in the command string so the TV HDMI
-#         input switches automatically before launching an Apple TV app.
-#         Both Apple TV switches are in-memory only — reset on reload.
-#
-# 1.2.0 — Version entry corrected to match shipped state (no logic changes
-#         from 1.1.0; this version aligns the file version with versions.json).
-#
-# 1.3.1 — Fixed HomeKitInputSwitch._update_options always fetching the live
-#         config entry via hass.config_entries.async_get_entry() instead of
-#         using the stale self._config_entry reference. Previously each switch
-#         instance held a snapshot of options from creation time — toggling
-#         multiple switches in sequence caused each one to overwrite the
-#         previous toggle's write with the old empty list, so homekit_inputs
-#         never accumulated correctly.
-#         named "Include: <input name>". Controls whether the input appears
-#         in the HomeKit/HA source list and is included in the Info button /
-#         Next Saved Input cycle. State persisted immediately to
-#         config_entry.options["homekit_inputs"] (a list of included input
-#         names) without triggering an integration reload.
-#         Default OFF — user must explicitly enable each input.
-#         Orphan cleanup in async_setup_entry removes switches for deleted
-#         inputs using the same pattern as sensor.py.
 
 import re
 from homeassistant.components.switch import SwitchEntity

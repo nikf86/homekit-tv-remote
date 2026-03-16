@@ -3,35 +3,38 @@
     "version": "1.0.3",
     "history": {
       "1.0.0": "Initial release. Loads all platforms, registers async_reload_entry listener.",
-      "1.0.1": "Added _slugify() helper. Stores remote_entity and media_player_entity in hass.data derived from tv_name so all platforms use correct entity IDs regardless of the name chosen during setup. Previously hardcoded to remote.homekit_tv / media_player.homekit_tv.",
-      "1.0.2": "async_reload_entry now skips reload when only homekit_inputs, debug_listen, or debug_send change. Previously any options write triggered a full reload which recreated all switch instances with fresh empty options, immediately wiping the homekit_inputs write after an Include switch was toggled. Now only custom_inputs changes trigger a reload.",
-      "1.0.3": "Fixed reload guard bug introduced in 1.0.2. The prev is not None check meant the guard never fired on the first options write after a fresh install or restart (prev always None), so every Include switch toggle still triggered a full reload and wiped the homekit_inputs write. Now stores current before comparing and also skips reload when prev is None and custom_inputs is empty."
+      "1.0.1": "Added _slugify() helper. Stores remote_entity and media_player_entity in hass.data derived from tv_name so all platforms use correct entity IDs regardless of the name chosen during setup.",
+      "1.0.2": "Attempted to guard async_reload_entry against non-custom_inputs writes. Did not work reliably due to race conditions.",
+      "1.0.3": "Removed update listener entirely. Listener fired on every async_update_entry call including Include switch toggles, causing a full reload that wiped homekit_inputs immediately after it was written. Reloads are now triggered explicitly by button.py after saving or deleting inputs only."
     }
   },
   "button.py": {
-    "version": "1.4.0",
+    "version": "1.5.1",
     "history": {
-      "1.0.0": "Initial release. ReloadHomeKitButton, TestCommandButton (reads remote entity ID from hass.data), AddCustomInputButton, DeleteCustomInputButton.",
-      "1.1.0": "AddCustomInputButton reads AppleTVAppSwitch state. When ON and command type is media_player, saves command_type=media_player_source so media_player.py uses select_source instead of play_media.",
-      "1.2.0": "AddCustomInputButton reads AppleTVInputSwitch state. When ON and command_type is media_player_source, embeds HAP identifier as |input_N third segment in command string. Graceful degradation if HAP Identifier field is empty.",
-      "1.3.0": "Added NextSavedInputButton (Next Saved Input, CONFIG category). Reads media_player_entity_ref from hass.data and calls _cycle_custom_inputs() directly \u2014 same logic and shared index counter as the iOS remote Info button.",
-      "1.4.0": "DeleteCustomInputButton now also removes the deleted input name from options[homekit_inputs] so no stale entries remain after deletion. NextSavedInputButton warning message updated to mention the Include switches. AddCustomInputButton log message now reminds user to enable the Include switch after saving."
+      "1.0.0": "Initial release. ReloadHomeKitButton, TestCommandButton, AddCustomInputButton, DeleteCustomInputButton.",
+      "1.1.0": "AddCustomInputButton reads AppleTVAppSwitch state. When ON, saves command_type=media_player_source so media_player.py uses select_source instead of play_media.",
+      "1.2.0": "AddCustomInputButton reads AppleTVInputSwitch state. When ON, embeds HAP identifier as |input_N third segment in command string. Graceful degradation if HAP Identifier field is empty.",
+      "1.3.0": "Added NextSavedInputButton (Next Saved Input, CONFIG category). Calls _cycle_custom_inputs() directly \u2014 same logic and shared index as the iOS remote Info button.",
+      "1.4.0": "DeleteCustomInputButton now also removes deleted input from homekit_inputs. NextSavedInputButton updated to warn when no Include switches are ON.",
+      "1.5.0": "TestCommandButton completely rewritten \u2014 now CONFIG, reads same fields as Save Input and executes without saving. Supports all command types. Save Input renumbered to 1g, Delete to 1h.",
+      "1.5.1": "AddCustomInputButton and DeleteCustomInputButton now call async_reload explicitly after writing options. Required because the update listener in __init__.py was removed in 1.0.3."
     }
   },
   "config_flow.py": {
     "version": "1.0.0",
     "history": {
-      "1.0.0": "Initial release. One-step setup flow: scans entity registry for homekit_controller media_player entities, presents dropdown and tv_name field, creates config entry."
+      "1.0.0": "Initial release. Scans entity registry for homekit_controller media_player entities, presents dropdown and tv_name field, creates config entry."
     }
   },
   "media_player.py": {
-    "version": "1.4.0",
+    "version": "1.4.1",
     "history": {
       "1.0.0": "Initial release. Bridges iOS HomeKit remote key events to HAP commands. Reads entity IDs from hass.data instead of hardcoding.",
-      "1.1.0": "Added media_player_source command_type in _execute_input_command. Uses select_source instead of play_media \u2014 required for Apple TV app launching.",
-      "1.2.0": "_execute_input_command for media_player_source supports optional third |input_N segment. When present, sends HAP input switch to remote entity before calling select_source, automatically switching the TV HDMI input.",
-      "1.3.0": "Stores self in hass.data[media_player_entity_ref] during async_added_to_hass so NextSavedInputButton in button.py can call _cycle_custom_inputs() directly. Both the iOS Info button and the device page button share the same _current_input_index.",
-      "1.4.0": "Added _included_inputs() helper that filters custom_inputs to those listed in options[homekit_inputs]. source_list now returns only included inputs \u2014 excluded inputs are invisible to HomeKit and HA. _cycle_custom_inputs() cycles only included inputs and resets the index to 0 if it goes out of range after an exclusion."
+      "1.1.0": "Added media_player_source command_type. Uses select_source instead of play_media \u2014 required for Apple TV app launching.",
+      "1.2.0": "_execute_input_command for media_player_source supports optional third |input_N segment for automatic HDMI input switching before app launch.",
+      "1.3.0": "Stores self in hass.data[media_player_entity_ref] so NextSavedInputButton can call _cycle_custom_inputs() directly.",
+      "1.4.0": "Added _included_inputs() helper filtering custom_inputs to those in options[homekit_inputs]. source_list and _cycle_custom_inputs() now respect Include switches.",
+      "1.4.1": "Restored _included_inputs() filter, media_player_entity_ref store, filtered source_list and _cycle_custom_inputs \u2014 all accidentally dropped in a regression. Clean comment pass."
     }
   },
   "remote.py": {
@@ -43,7 +46,7 @@
   "select.py": {
     "version": "1.0.0",
     "history": {
-      "1.0.0": "Initial release. InputTypeSelectEntity dropdown populated from all remote.* and media_player.* entities in HA. Selected value stored in-memory only, resets to hap on reload."
+      "1.0.0": "Initial release. InputTypeSelectEntity dropdown populated from all remote.* and media_player.* entities in HA. Selected value stored in-memory only, resets to hap on reload. Also excludes own entities more robustly using hass.data slug lookup."
     }
   },
   "sensor.py": {
@@ -55,18 +58,19 @@
   "switch.py": {
     "version": "1.3.1",
     "history": {
-      "1.0.0": "Initial release. DebugListenSwitch and DebugSendSwitch toggle HOMEKIT_TV_LISTEN / HOMEKIT_TV_SEND log tags live without restart. State persisted to config_entry.options. AppleTVSwitch (1. Apple TV) selects select_source vs play_media for media_player inputs (in-memory only).",
-      "1.1.0": "AppleTVSwitch renamed to AppleTVAppSwitch, label changed from 1. Apple TV to 1. Apple TV App. Added AppleTVInputSwitch (1. Apple TV Input): when ON at save time, button.py embeds the HAP identifier as |input_N in the command string so the TV HDMI input switches automatically before launching an Apple TV app. Both Apple TV switches are in-memory only.",
+      "1.0.0": "Initial release. DebugListenSwitch and DebugSendSwitch toggle log tags live. AppleTVSwitch selects select_source vs play_media for media_player inputs (in-memory only).",
+      "1.1.0": "Renamed AppleTVSwitch to AppleTVAppSwitch. Added AppleTVInputSwitch: embeds HAP identifier as |input_N for automatic HDMI switching before Apple TV app launch.",
       "1.2.0": "Version alignment only \u2014 no logic changes from 1.1.0.",
-      "1.3.0": "Added HomeKitInputSwitch: one persistent switch per saved input, named Include: <input name>. Controls whether the input appears in the HomeKit/HA source list and the input cycle. State persisted immediately to options[homekit_inputs] without triggering a reload. Default OFF. Orphan cleanup removes switches for deleted inputs.",
-      "1.3.1": "Fixed HomeKitInputSwitch._update_options stale config entry bug. Previously each switch instance held a snapshot of options from creation time, causing each toggle to overwrite the previous one with the old empty list. Now always fetches the live entry via async_get_entry() so homekit_inputs accumulates correctly across multiple switch toggles."
+      "1.3.0": "Added HomeKitInputSwitch: one persistent switch per saved input. Controls HomeKit/HA source list visibility and input cycle inclusion. Persists to options[homekit_inputs]. Default OFF. Orphan cleanup on reload.",
+      "1.3.1": "Fixed _update_options stale config entry bug. Now fetches live entry via async_get_entry() so homekit_inputs accumulates correctly across multiple switch toggles."
     }
   },
   "text.py": {
-    "version": "1.0.1",
+    "version": "1.1.0",
     "history": {
       "1.0.0": "Initial release. ConfigTextEntity fields for input configuration. CurrentIdentifierTextEntity displays active TV input.",
-      "1.0.1": "CurrentIdentifierTextEntity reads remote entity ID from hass.data instead of hardcoding remote.homekit_tv. Fixes current identifier display when tv_name is anything other than Homekit TV."
+      "1.0.1": "CurrentIdentifierTextEntity reads remote entity ID from hass.data instead of hardcoding remote.homekit_tv.",
+      "1.1.0": "Removed separate test_command ConfigTextEntity. Testing now uses existing config fields + Test Command button. CurrentIdentifierTextEntity moved to CONFIG category and renamed to 1i. Current Identifier."
     }
   }
 }

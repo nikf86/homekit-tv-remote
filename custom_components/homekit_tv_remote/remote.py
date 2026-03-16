@@ -1,29 +1,5 @@
-"""Remote platform for HomeKit TV Remote - HAP communication layer."""
+"""Remote entity — core HAP communication layer."""
 # Version: 1.0.0
-#
-# ROLE IN INTEGRATION:
-# This is the core HAP (HomeKit Accessory Protocol) communication layer.
-# It connects DIRECTLY to the Sony TV via the existing homekit_controller pairing,
-# bypassing the homekit_controller integration's own entities entirely.
-#
-# On setup it:
-#   1. Looks up the homekit_controller connection object for the paired TV
-#   2. Scans the TV's accessory characteristic list for the 5 key characteristics:
-#      RemoteKey, Active, VolumeSelector, ActiveIdentifier, Mute
-#   3. Creates remote.homekit_tv (TVRemote entity)
-#
-# At runtime it:
-#   - Polls ActiveIdentifier (current input) + Active (on/off) every 2-5 seconds
-#   - Optionally subscribes to push notifications if the TV supports them
-#   - Exposes current_source and current_identifier as state attributes
-#     (read by media_player.py and text.py to display the current input)
-#   - Sends all HAP commands (RemoteKey, Volume, Mute, Input switch) via
-#     put_characteristics on the raw connection
-#
-# Dependencies:
-#   - Requires homekit_controller to be set up and paired with the TV
-#   - hass.data["homekit_tv_remote"][entry_id]["remote_entity_ref"] is set here
-#     so that switch.py can flip _debug_listen/_debug_send flags without a reload
 
 import asyncio
 from typing import Any, Iterable

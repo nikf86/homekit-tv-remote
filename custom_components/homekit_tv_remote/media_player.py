@@ -1,29 +1,5 @@
-"""Media Player platform for HomeKit TV Remote - HomeKit Bridge interface layer."""
-# Version: 1.3.0
-#
-# CHANGES FROM 1.3.0:
-# - Fixed media_player_source execution when Apple TV Input switch was ON.
-#   button.py saves a 3-segment command: "media_player.entity|app_name|input_N".
-#   Old split("|", 1) passed "app_name|input_N" as the source — broken.
-#   Now: if 3 segments, sends HAP input switch first, then select_source with
-#   just the app name. Falls back to 2-segment if no input switch segment.
-#
-# CHANGES FROM 1.0.0:
-# - Remote entity ID and media_player entity ID are now read from
-#   hass.data[DOMAIN][entry_id] (set by __init__.py) instead of being
-#   hardcoded to "remote.homekit_tv" / "media_player.homekit_tv".
-# CHANGES FROM 1.1.0:
-# - Added "media_player_source" command_type branch in _execute_input_command.
-#   Uses media_player.select_source instead of media_player.play_media.
-#   Required for Apple TV integration where play_media is broken for app launching.
-#   Command format: "media_player.entity_id|app_name"
-# CHANGES FROM 1.2.0:
-# - _volume_level initialised to 0.5 (dummy, non-None) and _is_volume_muted
-#   initialised to False (dummy, non-None). HA hides volume and mute controls
-#   in the integration card whenever these properties return None, regardless
-#   of what is declared in supported_features. Since this integration uses
-#   HAP step commands (no absolute volume tracking), a static dummy value is
-#   the correct approach to keep the controls visible at all times.
+"""Media Player entity — bridges HomeKit Bridge key events to HAP commands."""
+# Version: 1.4.1
 
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.components.media_player.const import MediaPlayerEntityFeature
@@ -88,9 +64,21 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
         self._is_volume_muted = False   # not absolute levels. None hides the controls.
         self._current_input_index = 0
 
+    # ─── Helpers ───────────────────────────────────────────────────────────────
+
+    def _included_inputs(self) -> list:
+        """Return only inputs whose name is in options[homekit_inputs].
+        Read live so toggling an Include switch takes effect immediately."""
+        all_inputs = self._config_entry.options.get("custom_inputs", [])
+        included = set(self._config_entry.options.get("homekit_inputs", []))
+        return [inp for inp in all_inputs if inp.get("name") in included]
+
     # ─── Subscriptions ─────────────────────────────────────────────────────────
 
     async def async_added_to_hass(self):
+        # Store reference so NextSavedInputButton can call _cycle_custom_inputs()
+        self.hass.data.setdefault(DOMAIN, {}).setdefault(self._config_entry.entry_id, {})
+        self.hass.data[DOMAIN][self._config_entry.entry_id]["media_player_entity_ref"] = self
 
         @callback
         def remote_state_changed(event):
@@ -165,8 +153,8 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
 
     @property
     def source_list(self):
-        custom_inputs = self._config_entry.options.get("custom_inputs", [])
-        return [inp["name"] for inp in custom_inputs] if custom_inputs else []
+        """Only inputs with their Include switch ON appear in HomeKit and HA."""
+        return [inp["name"] for inp in self._included_inputs()]
 
     @property
     def volume_level(self):
@@ -371,18 +359,19 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
     # ─── Info Button: Input Cycling ────────────────────────────────────────────
 
     async def _cycle_custom_inputs(self):
-        """Cycle through saved custom_inputs when the iOS remote Info button is pressed."""
-        custom_inputs = self._config_entry.options.get("custom_inputs", [])
-        if not custom_inputs:
-            _LOGGER.warning("No custom inputs configured, Info button has no effect")
+        """Cycle through enabled inputs. Called by iOS Info button and NextSavedInputButton.
+        Both share _current_input_index on this instance."""
+        included = self._included_inputs()
+        if not included:
+            _LOGGER.warning("No included inputs — turn on an Include switch on the device page")
             return
-        current_input = custom_inputs[self._current_input_index]
-        _LOGGER.info(
-            "Cycling to input: %s (index %d of %d)",
-            current_input["name"], self._current_input_index + 1, len(custom_inputs)
-        )
+        if self._current_input_index >= len(included):
+            self._current_input_index = 0
+        current_input = included[self._current_input_index]
+        _LOGGER.info("Cycling to: %s (%d/%d)", current_input["name"],
+                     self._current_input_index + 1, len(included))
         await self._execute_input_command(current_input)
-        self._current_input_index = (self._current_input_index + 1) % len(custom_inputs)
+        self._current_input_index = (self._current_input_index + 1) % len(included)
 
     # ─── Playback Control ──────────────────────────────────────────────────────
 

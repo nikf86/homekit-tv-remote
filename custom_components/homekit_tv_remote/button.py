@@ -1,45 +1,5 @@
-"""Button entities for HomeKit TV Remote configuration."""
+"""Button entities — test, save, delete inputs; cycle and reload."""
 # Version: 1.5.1
-#
-# 1.0.0 — Initial release. ReloadHomeKitButton, TestCommandButton (reads remote
-#         entity ID from hass.data), AddCustomInputButton, DeleteCustomInputButton.
-#
-# 1.1.0 — AddCustomInputButton reads AppleTVAppSwitch state. When ON and command
-#         type is media_player, saves command_type=media_player_source so
-#         media_player.py uses select_source instead of play_media.
-#
-# 1.2.0 — AddCustomInputButton reads AppleTVInputSwitch state. When ON and
-#         command_type is media_player_source, embeds HAP identifier as |input_N
-#         third segment in command string. Graceful degradation if HAP Identifier
-#         field is empty.
-#
-# 1.3.0 — Added NextSavedInputButton ("Next Saved Input", CONFIG category).
-#         Reads media_player_entity_ref from hass.data and calls
-#         _cycle_custom_inputs() directly — same logic and shared index counter
-#         as the iOS remote Info button.
-#
-# 1.4.0 — NextSavedInputButton now logs a specific warning when no inputs are
-#         enabled via their HomeKitInputSwitch, matching the updated message
-#         from _cycle_custom_inputs() in media_player.py 1.4.0.
-#
-# 1.5.1 — AddCustomInputButton and DeleteCustomInputButton now call
-#         async_reload explicitly after writing options. The update
-#         listener in __init__.py has been removed so reloads only
-#         happen when inputs are actually saved or deleted.
-#
-# 1.5.0 — TestCommandButton completely rewritten. Was DIAGNOSTIC and only fired
-#         raw HAP commands via a separate test_command text field.
-#         Now CONFIG, named "1e. Test Command", reads the same fields that
-#         AddCustomInputButton uses (1b Command, 1c App Name, 1d Input Type,
-#         Apple TV App switch, Apple TV Input switch) and executes the command
-#         immediately without saving — supporting all command types:
-#           hap       → remote.send_command on the HAP remote entity
-#           remote    → remote.send_command on any remote.* entity
-#           media_player       → media_player.play_media
-#           media_player_source → media_player.select_source (Apple TV)
-#         The separate test_command text entity in text.py has been removed.
-#         Save Input renumbered to "1f. Save Input", Delete to "1g. Delete Last
-#         Input" to make room for Test Command at 1e.
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
