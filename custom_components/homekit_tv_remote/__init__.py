@@ -1,5 +1,12 @@
 """HomeKit TV Remote integration."""
-# Version: 1.0.1
+# Version: 1.0.2
+#
+# CHANGES FROM 1.0.1:
+# - async_reload_entry now skips reload when only homekit_inputs, debug_listen,
+#   or debug_send change. Previously any options write (including toggling an
+#   Include switch) triggered a full reload, which recreated all switch instances
+#   with fresh empty options and immediately wiped the homekit_inputs write.
+#   Now only custom_inputs changes (inputs added/deleted) trigger a reload.
 #
 # CHANGES FROM 1.0.0:
 # - Added _slugify() helper to derive entity IDs from tv_name at runtime
@@ -82,5 +89,23 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Called automatically whenever config_entry.options change."""
+    """
+    Called automatically whenever config_entry.options change.
+
+    Only reloads when custom_inputs changes (inputs added or deleted).
+    Skips reload for homekit_inputs, debug_listen, debug_send — those are
+    handled live without a reload. Without this guard, toggling an Include
+    switch triggers a full reload which recreates all switch instances with
+    fresh empty options, wiping the homekit_inputs write immediately after
+    it is saved.
+    """
+    prev = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("last_custom_inputs")
+    current = entry.options.get("custom_inputs", [])
+
+    if prev is not None and prev == current:
+        return
+
+    hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
+    hass.data[DOMAIN][entry.entry_id]["last_custom_inputs"] = current
+
     await hass.config_entries.async_reload(entry.entry_id)
