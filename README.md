@@ -1,6 +1,8 @@
 # HomeKit TV Remote
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![GitHub release](https://img.shields.io/github/release/nikf86/homekit-tv-remote.svg)](https://github.com/nikf86/homekit-tv-remote/releases)
+[![HACS installs](https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote)](https://github.com/nikf86/homekit-tv-remote)
 
 Control your TV directly over HAP — the same protocol Apple devices use — giving you a native HA remote entity and the full iOS/iPadOS remote widget in Control Center.
 
@@ -60,6 +62,8 @@ Everything is in the **Configuration section** of the device page. The workflow 
 3. Press **1g. Save Input**
 4. Turn ON the **Include: \<name\>** switch to make it appear in HomeKit and the input cycle
 
+> After saving inputs or toggling Include switches, **force-close and reopen the Apple Home app** on your iPhone/iPad for changes to appear.
+
 | Field | Purpose |
 |---|---|
 | **1a. Input Name** | Display name shown in HomeKit and HA |
@@ -73,7 +77,7 @@ Everything is in the **Configuration section** of the device page. The workflow 
 | **1i. Current Identifier** | Live read-out of the TV's current input and its HAP number |
 | **Include: \<name\>** | Controls whether this input appears in HomeKit and the cycle |
 | **Next Saved Input** | Cycles to the next enabled input — same as the iOS ⓘ Info button |
-| **Reload HomeKit YAML** | Re-registers the TV with HomeKit Bridge after adding/removing inputs. After reloading, force-close and reopen the Apple Home app on your iPhone/iPad for the changes to appear. |
+| **Reload HomeKit YAML** | Manual fallback — use only if the Apple Home source list gets out of sync. |
 
 ### Apple TV specifics
 
