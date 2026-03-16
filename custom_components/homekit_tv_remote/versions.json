@@ -1,10 +1,11 @@
 {
   "__init__.py": {
-    "version": "1.0.2",
+    "version": "1.0.3",
     "history": {
       "1.0.0": "Initial release. Loads all platforms, registers async_reload_entry listener.",
       "1.0.1": "Added _slugify() helper. Stores remote_entity and media_player_entity in hass.data derived from tv_name so all platforms use correct entity IDs regardless of the name chosen during setup. Previously hardcoded to remote.homekit_tv / media_player.homekit_tv.",
-      "1.0.2": "async_reload_entry now skips reload when only homekit_inputs, debug_listen, or debug_send change. Previously any options write triggered a full reload which recreated all switch instances with fresh empty options, immediately wiping the homekit_inputs write after an Include switch was toggled. Now only custom_inputs changes trigger a reload."
+      "1.0.2": "async_reload_entry now skips reload when only homekit_inputs, debug_listen, or debug_send change. Previously any options write triggered a full reload which recreated all switch instances with fresh empty options, immediately wiping the homekit_inputs write after an Include switch was toggled. Now only custom_inputs changes trigger a reload.",
+      "1.0.3": "Fixed reload guard bug introduced in 1.0.2. The prev is not None check meant the guard never fired on the first options write after a fresh install or restart (prev always None), so every Include switch toggle still triggered a full reload and wiped the homekit_inputs write. Now stores current before comparing and also skips reload when prev is None and custom_inputs is empty."
     }
   },
   "button.py": {

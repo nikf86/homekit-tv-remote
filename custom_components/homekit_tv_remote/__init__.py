@@ -1,5 +1,5 @@
 """HomeKit TV Remote integration."""
-# Version: 1.0.2
+# Version: 1.0.3
 #
 # CHANGES FROM 1.0.1:
 # - async_reload_entry now skips reload when only homekit_inputs, debug_listen,
@@ -99,13 +99,20 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     fresh empty options, wiping the homekit_inputs write immediately after
     it is saved.
     """
-    prev = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("last_custom_inputs")
     current = entry.options.get("custom_inputs", [])
+    prev = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("last_custom_inputs")
 
-    if prev is not None and prev == current:
-        return
-
+    # Always store the current value for next comparison
     hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
     hass.data[DOMAIN][entry.entry_id]["last_custom_inputs"] = current
+
+    # Skip reload if custom_inputs has not changed — this covers all live-handled
+    # option changes: homekit_inputs (Include switches), debug_listen, debug_send.
+    # prev is None only on the very first options write ever; in that case we
+    # check whether any inputs exist at all — if none, no reload is needed.
+    if prev is not None and prev == current:
+        return
+    if prev is None and current == []:
+        return
 
     await hass.config_entries.async_reload(entry.entry_id)
