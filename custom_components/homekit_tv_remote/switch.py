@@ -209,7 +209,7 @@ class HomeKitInputSwitch(SwitchEntity):
         included = config_entry.options.get("homekit_inputs", [])
         self._attr_is_on = self._input_name in included
 
-    def _update_options(self, included: bool) -> None:
+    async def _update_options(self, included: bool) -> None:
         """
         Persist the updated homekit_inputs list to config_entry.options.
         Adds or removes self._input_name from the list and writes immediately.
@@ -234,18 +234,21 @@ class HomeKitInputSwitch(SwitchEntity):
             live_entry,
             options={**live_entry.options, "homekit_inputs": current}
         )
+        # Reload the integration so the media player entity is recreated with
+        # the updated source_list — HomeKit Bridge then picks it up correctly.
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
 
     async def async_turn_on(self, **kwargs):
         """Include this input in the HomeKit source list and cycle."""
         self._attr_is_on = True
         self.async_write_ha_state()
-        self._update_options(included=True)
+        await self._update_options(included=True)
 
     async def async_turn_off(self, **kwargs):
         """Exclude this input from the HomeKit source list and cycle."""
         self._attr_is_on = False
         self.async_write_ha_state()
-        self._update_options(included=False)
+        await self._update_options(included=False)
 
 
 # ─── Debug Listen Switch ───────────────────────────────────────────────────────
