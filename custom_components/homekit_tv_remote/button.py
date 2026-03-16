@@ -1,5 +1,5 @@
 """Button entities for HomeKit TV Remote configuration."""
-# Version: 1.5.0
+# Version: 1.5.1
 #
 # 1.0.0 — Initial release. ReloadHomeKitButton, TestCommandButton (reads remote
 #         entity ID from hass.data), AddCustomInputButton, DeleteCustomInputButton.
@@ -21,6 +21,11 @@
 # 1.4.0 — NextSavedInputButton now logs a specific warning when no inputs are
 #         enabled via their HomeKitInputSwitch, matching the updated message
 #         from _cycle_custom_inputs() in media_player.py 1.4.0.
+#
+# 1.5.1 — AddCustomInputButton and DeleteCustomInputButton now call
+#         async_reload explicitly after writing options. The update
+#         listener in __init__.py has been removed so reloads only
+#         happen when inputs are actually saved or deleted.
 #
 # 1.5.0 — TestCommandButton completely rewritten. Was DIAGNOSTIC and only fired
 #         raw HAP commands via a separate test_command text field.
@@ -384,6 +389,7 @@ class AddCustomInputButton(ButtonEntity):
             "Saved input: %s (%s: %s) — enable 'Include: %s' switch to add to HomeKit",
             input_name.native_value, command_type, full_command, input_name.native_value
         )
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
 
 
 # ─── Delete Custom Input Button ────────────────────────────────────────────────
@@ -420,6 +426,7 @@ class DeleteCustomInputButton(ButtonEntity):
                 }
             )
             _LOGGER.info("Deleted input: %s", deleted_name or "unknown")
+            await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         else:
             _LOGGER.warning("No inputs to delete")
 

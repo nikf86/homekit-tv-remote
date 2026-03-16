@@ -1,19 +1,21 @@
 """HomeKit TV Remote integration."""
 # Version: 1.0.3
 #
-# CHANGES FROM 1.0.1:
-# - async_reload_entry now skips reload when only homekit_inputs, debug_listen,
-#   or debug_send change. Previously any options write (including toggling an
-#   Include switch) triggered a full reload, which recreated all switch instances
-#   with fresh empty options and immediately wiped the homekit_inputs write.
-#   Now only custom_inputs changes (inputs added/deleted) trigger a reload.
+# 1.0.0 — Initial release. Loads all platforms, registers async_reload_entry listener.
 #
-# CHANGES FROM 1.0.0:
-# - Added _slugify() helper to derive entity IDs from tv_name at runtime
-# - Stores "remote_entity" and "media_player_entity" in hass.data so all
-#   platforms reference the correct entity IDs regardless of the tv_name
-#   chosen during setup. Previously these were hardcoded to "remote.homekit_tv"
-#   and "media_player.homekit_tv", which broke when any other name was used.
+# 1.0.1 — Added _slugify() helper. Stores remote_entity and media_player_entity
+#         in hass.data derived from tv_name so all platforms use correct entity
+#         IDs regardless of the name chosen during setup.
+#
+# 1.0.2 — Attempted to guard async_reload_entry against non-custom_inputs writes.
+#         Did not work reliably due to race conditions.
+#
+# 1.0.3 — Removed the update listener entirely. The listener fired on every
+#         async_update_entry call including Include switch toggles and debug
+#         switches, causing a full reload that wiped homekit_inputs immediately
+#         after it was written. Reloads are now triggered explicitly by button.py
+#         after saving or deleting inputs — the only operations that actually
+#         require a reload.
 
 import re
 from homeassistant.config_entries import ConfigEntry
@@ -57,6 +59,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     Derives remote and media_player entity IDs from tv_name and stores them
     in hass.data so all platform files use consistent, correct entity IDs.
+
+    No update listener is registered — reloads are triggered explicitly by
+    button.py after saving or deleting inputs.
     """
     _LOGGER.debug("Setting up HomeKit TV Remote integration")
 
@@ -65,17 +70,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
-        # Derived from tv_name — used by media_player.py, button.py, text.py
         "remote_entity": f"remote.{slug}",
         "media_player_entity": f"media_player.{slug}",
-        # remote.py will add:  "remote_entity_ref" → TVRemote instance
-        # select.py will add:  "input_type"        → InputTypeSelectEntity instance
-        # text.py will add:    "text_entities"     → {key: ConfigTextEntity} dict
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
 
@@ -86,33 +85,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
-
-
-async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """
-    Called automatically whenever config_entry.options change.
-
-    Only reloads when custom_inputs changes (inputs added or deleted).
-    Skips reload for homekit_inputs, debug_listen, debug_send — those are
-    handled live without a reload. Without this guard, toggling an Include
-    switch triggers a full reload which recreates all switch instances with
-    fresh empty options, wiping the homekit_inputs write immediately after
-    it is saved.
-    """
-    current = entry.options.get("custom_inputs", [])
-    prev = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("last_custom_inputs")
-
-    # Always store the current value for next comparison
-    hass.data.setdefault(DOMAIN, {}).setdefault(entry.entry_id, {})
-    hass.data[DOMAIN][entry.entry_id]["last_custom_inputs"] = current
-
-    # Skip reload if custom_inputs has not changed — this covers all live-handled
-    # option changes: homekit_inputs (Include switches), debug_listen, debug_send.
-    # prev is None only on the very first options write ever; in that case we
-    # check whether any inputs exist at all — if none, no reload is needed.
-    if prev is not None and prev == current:
-        return
-    if prev is None and current == []:
-        return
-
-    await hass.config_entries.async_reload(entry.entry_id)
