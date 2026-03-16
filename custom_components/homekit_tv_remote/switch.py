@@ -1,5 +1,5 @@
 """Switch entities for debug options and input configuration."""
-# Version: 1.3.0
+# Version: 1.3.1
 #
 # 1.0.0 — Initial release.
 #         DebugListenSwitch and DebugSendSwitch toggle HOMEKIT_TV_LISTEN /
@@ -17,7 +17,13 @@
 # 1.2.0 — Version entry corrected to match shipped state (no logic changes
 #         from 1.1.0; this version aligns the file version with versions.json).
 #
-# 1.3.0 — Added HomeKitInputSwitch: one persistent switch per saved input,
+# 1.3.1 — Fixed HomeKitInputSwitch._update_options always fetching the live
+#         config entry via hass.config_entries.async_get_entry() instead of
+#         using the stale self._config_entry reference. Previously each switch
+#         instance held a snapshot of options from creation time — toggling
+#         multiple switches in sequence caused each one to overwrite the
+#         previous toggle's write with the old empty list, so homekit_inputs
+#         never accumulated correctly.
 #         named "Include: <input name>". Controls whether the input appears
 #         in the HomeKit/HA source list and is included in the Info button /
 #         Next Saved Input cycle. State persisted immediately to
@@ -240,15 +246,25 @@ class HomeKitInputSwitch(SwitchEntity):
         Persist the updated homekit_inputs list to config_entry.options.
         Adds or removes self._input_name from the list and writes immediately.
         Does not call async_update_entry with reload=True — no reload triggered.
+
+        Always fetches the live config entry from hass.config_entries to avoid
+        using a stale reference — if multiple switches are toggled in sequence,
+        each one must read the latest options written by the previous toggle,
+        not the snapshot from when this switch instance was created.
         """
-        current = list(self._config_entry.options.get("homekit_inputs", []))
+        live_entry = self.hass.config_entries.async_get_entry(
+            self._config_entry.entry_id
+        )
+        if not live_entry:
+            return
+        current = list(live_entry.options.get("homekit_inputs", []))
         if included and self._input_name not in current:
             current.append(self._input_name)
         elif not included and self._input_name in current:
             current.remove(self._input_name)
         self.hass.config_entries.async_update_entry(
-            self._config_entry,
-            options={**self._config_entry.options, "homekit_inputs": current}
+            live_entry,
+            options={**live_entry.options, "homekit_inputs": current}
         )
 
     async def async_turn_on(self, **kwargs):
