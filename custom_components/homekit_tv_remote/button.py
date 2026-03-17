@@ -1,5 +1,5 @@
 """Button entities — test, save, delete inputs; cycle and reload."""
-# Version: 1.5.1
+# Version: 1.6.0
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -167,6 +167,7 @@ async def async_setup_entry(
         TestCommandButton(hass, entry),
         AddCustomInputButton(hass, entry),
         DeleteCustomInputButton(hass, entry),
+        ApplyChangesButton(hass, entry),
         NextSavedInputButton(hass, entry),
     ]
     async_add_entities(buttons)
@@ -349,7 +350,6 @@ class AddCustomInputButton(ButtonEntity):
             "Saved input: %s (%s: %s) — enable 'Include: %s' switch to add to HomeKit",
             input_name.native_value, command_type, full_command, input_name.native_value
         )
-        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
 
 
 # ─── Delete Custom Input Button ────────────────────────────────────────────────
@@ -386,9 +386,30 @@ class DeleteCustomInputButton(ButtonEntity):
                 }
             )
             _LOGGER.info("Deleted input: %s", deleted_name or "unknown")
-            await self.hass.config_entries.async_reload(self._config_entry.entry_id)
         else:
             _LOGGER.warning("No inputs to delete")
+
+
+# ─── Apply Changes Button ─────────────────────────────────────────────────────
+
+class ApplyChangesButton(ButtonEntity):
+    """Reloads the integration to apply saved inputs and Include switch changes.
+    Press once after making any configuration changes."""
+
+    def __init__(self, hass, config_entry):
+        self.hass = hass
+        self._config_entry = config_entry
+        self._attr_unique_id = f"{config_entry.entry_id}_apply_changes"
+        self._attr_name = "Apply Changes"
+        self._attr_icon = "mdi:check"
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, config_entry.entry_id)},
+        }
+
+    async def async_press(self):
+        _LOGGER.info("Applying changes — reloading integration")
+        await self.hass.config_entries.async_reload(self._config_entry.entry_id)
 
 
 # ─── Next Saved Input Button ───────────────────────────────────────────────────

@@ -9,7 +9,7 @@
     }
   },
   "button.py": {
-    "version": "1.5.1",
+    "version": "1.6.0",
     "history": {
       "1.0.0": "Initial release. ReloadHomeKitButton, TestCommandButton, AddCustomInputButton, DeleteCustomInputButton.",
       "1.1.0": "AddCustomInputButton reads AppleTVAppSwitch state. When ON, saves command_type=media_player_source so media_player.py uses select_source instead of play_media.",
@@ -17,7 +17,8 @@
       "1.3.0": "Added NextSavedInputButton (Next Saved Input, CONFIG category). Calls _cycle_custom_inputs() directly \u2014 same logic and shared index as the iOS remote Info button.",
       "1.4.0": "DeleteCustomInputButton now also removes deleted input from homekit_inputs. NextSavedInputButton updated to warn when no Include switches are ON.",
       "1.5.0": "TestCommandButton completely rewritten \u2014 now CONFIG, reads same fields as Save Input and executes without saving. Supports all command types. Save Input renumbered to 1g, Delete to 1h.",
-      "1.5.1": "AddCustomInputButton and DeleteCustomInputButton now call async_reload explicitly after writing options. Required because the update listener in __init__.py was removed in 1.0.3."
+      "1.5.1": "AddCustomInputButton and DeleteCustomInputButton now call async_reload explicitly after writing options. Required because the update listener in __init__.py was removed in 1.0.3.",
+      "1.6.0": "Added ApplyChangesButton \u2014 reloads the integration on demand. Removed automatic async_reload from Save Input and Delete Last Input. Nothing reloads automatically anymore \u2014 user presses Apply Changes when ready."
     }
   },
   "config_flow.py": {
@@ -27,14 +28,15 @@
     }
   },
   "media_player.py": {
-    "version": "1.4.1",
+    "version": "1.5.0",
     "history": {
       "1.0.0": "Initial release. Bridges iOS HomeKit remote key events to HAP commands. Reads entity IDs from hass.data instead of hardcoding.",
       "1.1.0": "Added media_player_source command_type. Uses select_source instead of play_media \u2014 required for Apple TV app launching.",
       "1.2.0": "_execute_input_command for media_player_source supports optional third |input_N segment for automatic HDMI input switching before app launch.",
       "1.3.0": "Stores self in hass.data[media_player_entity_ref] so NextSavedInputButton can call _cycle_custom_inputs() directly.",
       "1.4.0": "Added _included_inputs() helper filtering custom_inputs to those in options[homekit_inputs]. source_list and _cycle_custom_inputs() now respect Include switches.",
-      "1.4.1": "Restored _included_inputs() filter, media_player_entity_ref store, filtered source_list and _cycle_custom_inputs \u2014 all accidentally dropped in a regression. Clean comment pass."
+      "1.4.1": "Restored _included_inputs() filter, media_player_entity_ref store, filtered source_list and _cycle_custom_inputs \u2014 all accidentally dropped in a regression. Clean comment pass.",
+      "1.5.0": "Removed blocking=True from fire-and-forget service calls (power, volume, D-pad, playback). Commands now fire without waiting for TV acknowledgement, eliminating queuing lag on rapid button presses. Input switching keeps blocking=True since it is sequential and deliberate."
     }
   },
   "remote.py": {
@@ -56,13 +58,14 @@
     }
   },
   "switch.py": {
-    "version": "1.3.1",
+    "version": "1.3.5",
     "history": {
       "1.0.0": "Initial release. DebugListenSwitch and DebugSendSwitch toggle log tags live. AppleTVSwitch selects select_source vs play_media for media_player inputs (in-memory only).",
       "1.1.0": "Renamed AppleTVSwitch to AppleTVAppSwitch. Added AppleTVInputSwitch: embeds HAP identifier as |input_N for automatic HDMI switching before Apple TV app launch.",
       "1.2.0": "Version alignment only \u2014 no logic changes from 1.1.0.",
       "1.3.0": "Added HomeKitInputSwitch: one persistent switch per saved input. Controls HomeKit/HA source list visibility and input cycle inclusion. Persists to options[homekit_inputs]. Default OFF. Orphan cleanup on reload.",
-      "1.3.1": "Fixed _update_options stale config entry bug. Now fetches live entry via async_get_entry() so homekit_inputs accumulates correctly across multiple switch toggles."
+      "1.3.1": "Fixed _update_options stale config entry bug. Now fetches live entry via async_get_entry() so homekit_inputs accumulates correctly across multiple switch toggles.",
+      "1.3.5": "Removed automatic async_write_ha_state and async_reload from Include switch toggles. All writes are now silent \u2014 user presses Apply Changes when ready."
     }
   },
   "text.py": {
