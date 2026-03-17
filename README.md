@@ -61,7 +61,7 @@ Everything is in the **Configuration section** of the device page. The workflow 
 2. Press **1f. Test Command** to verify it works
 3. Press **1g. Save Input**
 4. Turn ON the **Include: \<name\>** switch to make it appear in HomeKit and the input cycle
-5. Press **Apply Changes** when you are done — this applies all saved inputs and Include switch changes at once
+5. Press **Reload HomeKit YAML** when you are done — applies all changes and re-registers the TV with Apple Home
 6. Force-close and reopen the **Apple Home app** on your iPhone/iPad for changes to appear
 
 | Field | Purpose |
@@ -77,8 +77,7 @@ Everything is in the **Configuration section** of the device page. The workflow 
 | **1i. Current Identifier** | Live read-out of the TV's current input and its HAP number |
 | **Include: \<name\>** | Controls whether this input appears in HomeKit and the cycle |
 | **Next Saved Input** | Cycles to the next enabled input — same as the iOS ⓘ Info button |
-| **Apply Changes** | Applies all changes at once — press once when done saving inputs and toggling Include switches |
-| **Reload HomeKit YAML** | Manual fallback — use only if the Apple Home source list gets out of sync. |
+| **Reload HomeKit YAML** | Applies all pending changes then re-registers the TV with Apple Home — press once when done |
 
 ### Apple TV specifics
 

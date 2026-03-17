@@ -1,5 +1,5 @@
 """Media Player entity — bridges HomeKit Bridge key events to HAP commands."""
-# Version: 1.5.0
+# Version: 1.5.1
 
 from homeassistant.components.media_player import MediaPlayerEntity
 from homeassistant.components.media_player.const import MediaPlayerEntityFeature
@@ -124,7 +124,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
                         "remote",
                         "send_command",
                         {"entity_id": self._hap_remote_entity, "command": command},
-                        blocking=False
+                        blocking=True
                     )
                 )
 
@@ -189,7 +189,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             await self.hass.services.async_call(
                 "remote", "turn_on",
                 {"entity_id": self._hap_remote_entity},
-                blocking=False
+                blocking=True
             )
         except Exception as e:
             _LOGGER.error("Error turning on TV: %s", e)
@@ -199,7 +199,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             await self.hass.services.async_call(
                 "remote", "turn_off",
                 {"entity_id": self._hap_remote_entity},
-                blocking=False
+                blocking=True
             )
         except Exception as e:
             _LOGGER.error("Error turning off TV: %s", e)
@@ -211,7 +211,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             await self.hass.services.async_call(
                 "remote", "send_command",
                 {"entity_id": self._hap_remote_entity, "command": "volume_up"},
-                blocking=False
+                blocking=True
             )
         except Exception as e:
             _LOGGER.error("Error volume up: %s", e)
@@ -221,7 +221,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             await self.hass.services.async_call(
                 "remote", "send_command",
                 {"entity_id": self._hap_remote_entity, "command": "volume_down"},
-                blocking=False
+                blocking=True
             )
         except Exception as e:
             _LOGGER.error("Error volume down: %s", e)
@@ -231,7 +231,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             await self.hass.services.async_call(
                 "remote", "send_command",
                 {"entity_id": self._hap_remote_entity, "command": "mute"},
-                blocking=False
+                blocking=True
             )
         except Exception as e:
             _LOGGER.error("Error muting volume: %s", e)
