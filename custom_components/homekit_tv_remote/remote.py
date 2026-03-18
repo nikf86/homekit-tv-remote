@@ -1,5 +1,5 @@
 """Remote platform for HomeKit TV Remote - HAP communication layer."""
-# Version: 1.0.0
+# Version: 1.1.0
 #
 # ROLE IN INTEGRATION:
 # This is the core HAP (HomeKit Accessory Protocol) communication layer.
@@ -524,28 +524,21 @@ class TVRemote(RemoteEntity):
     # ─── Button Press ──────────────────────────────────────────────────────────
 
     async def _send_button_press(self, button_value: int, hold_time: float = 0) -> bool:
-        """
-        Write a RemoteKey integer value to the TV's RemoteKey characteristic.
-        
-        Args:
-            button_value: HAP RemoteKey integer (4=ArrowUp, 9=Back, 11=PlayPause, etc.)
-            hold_time:    Seconds to sleep after writing (simulates holding a button).
-                          Note: HAP release is automatic — the TV handles it.
-                          0 = instant press (normal case).
-        
-        Returns True on success, False on HAP error.
-        Called by _send_command_internal for integer commands.
-        """
+        """Send a RemoteKey press. Fire and forget for instant presses — no waiting
+        for TV acknowledgement so rapid presses don't queue behind each other.
+        Hold presses still await completion since timing matters."""
         try:
             if hold_time > 0:
                 self._log_send("Pressing button %s (hold for %.1fs)", button_value, hold_time)
                 await self._conn.put_characteristics([(self._rk[0], self._rk[1], button_value)])
                 await asyncio.sleep(hold_time)
-                # HAP release is implicit — no second write needed
             else:
                 self._log_send("Sending RemoteKey: %s", button_value)
-                await self._conn.put_characteristics([(self._rk[0], self._rk[1], button_value)])
-
+                # Fire and forget — don't await acknowledgement from TV.
+                # TCP ordering guarantees the TV receives rapid presses in sequence.
+                asyncio.ensure_future(
+                    self._conn.put_characteristics([(self._rk[0], self._rk[1], button_value)])
+                )
             self._last_error_status = HAP_STATUS_SUCCESS
             return True
         except Exception as e:
@@ -555,18 +548,23 @@ class TVRemote(RemoteEntity):
     # ─── Command Dispatch ──────────────────────────────────────────────────────
 
     async def async_send_command(self, command: Iterable[str], **kw) -> None:
-        """
-        HA service handler for remote.send_command.
-        Acquires the command lock to serialize concurrent calls,
-        then delegates to _send_command_internal.
-        
-        Called by:
-          - media_player.py: for dpad/volume/mute/input commands
-          - button.py (TestCommandButton): for manual test commands
-          - HomeKit Bridge: indirectly (not directly — goes via media_player)
-        """
+        """HA service handler for remote.send_command.
+        Pure RemoteKey integer commands skip the lock — they fire and forget
+        so rapid D-pad/back/play presses don't queue.
+        All other commands (volume, mute, input switch) keep the lock."""
+        cmds = list(command)
+        # Skip lock only for single pure integer commands (RemoteKey presses)
+        if len(cmds) == 1 and not kw.get("hold_secs", 0):
+            try:
+                int(cmds[0])
+                # It's a plain integer — fire directly without lock
+                await self._send_command_internal(cmds, **kw)
+                return
+            except (ValueError, TypeError):
+                pass
+        # All other commands go through the lock
         async with self._command_lock:
-            await self._send_command_internal(command, **kw)
+            await self._send_command_internal(cmds, **kw)
 
     async def _send_command_internal(self, command: Iterable[str], **kw) -> None:
         """
