@@ -42,10 +42,12 @@
     }
   },
   "remote.py": {
-    "version": "1.1.0",
+    "version": "1.2.1",
     "history": {
       "1.0.0": "Initial release. Core HAP communication layer. Connects to TV via homekit_controller pairing, scans for RemoteKey/Active/VolumeSelector/ActiveIdentifier/Mute characteristics, polls and subscribes to ActiveIdentifier, dispatches all HAP commands.",
-      "1.1.0": "Fire and forget for RemoteKey button presses \u2014 rapid D-pad/back/play presses no longer queue behind each other waiting for TV acknowledgement. Lock skipped for single integer commands. Hold presses and all other commands (volume, mute, input switch) keep the lock and full await."
+      "1.1.0": "Fire and forget for RemoteKey button presses \u2014 rapid D-pad/back/play presses no longer queue behind each other waiting for TV acknowledgement. Lock skipped for single integer commands. Hold presses and all other commands (volume, mute, input switch) keep the lock and full await.",
+      "1.2.0": "Replaced HAP polling and push subscription with HK Controller media_player state listener. On/off state and current input identifier are now derived from the HomeKit Controller media_player entity (selected during setup). Identifier = source_list.index(source) + 1 (1-based, no fallback). Removed: timedelta, async_track_time_interval, _try_native_subscription, _poll_active_identifier, _subscription_active, _change_reason. Added: _hk_entity_id, _update_from_hk_state. extra_state_attributes no longer includes subscription_active or change_reason.",
+      "1.2.1": "Bug fix: _update_from_hk_state was missing async_write_ha_state() in the power-state branch. If the TV turned off without a simultaneous source change, the remote entity state stayed stale until the next event. Added async_write_ha_state() immediately after _attr_is_on is updated."
     }
   },
   "select.py": {

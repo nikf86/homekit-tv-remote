@@ -1,24 +1,45 @@
 """Remote platform for HomeKit TV Remote - HAP communication layer."""
-# Version: 1.1.0
+# Version: 1.2.1
 #
 # ROLE IN INTEGRATION:
-# This is the core HAP (HomeKit Accessory Protocol) communication layer.
-# It connects DIRECTLY to the Sony TV via the existing homekit_controller pairing,
-# bypassing the homekit_controller integration's own entities entirely.
+# Core HAP communication layer. Connects to the TV via homekit_controller
+# pairing for sending commands. State (on/off and current input) is derived
+# by listening to the HomeKit Controller media_player entity selected during
+# setup — no HAP polling or push subscription.
 #
 # On setup it:
 #   1. Looks up the homekit_controller connection object for the paired TV
 #   2. Scans the TV's accessory characteristic list for the 5 key characteristics:
 #      RemoteKey, Active, VolumeSelector, ActiveIdentifier, Mute
-#   3. Creates remote.homekit_tv (TVRemote entity)
+#   3. Creates the TVRemote entity
 #
 # At runtime it:
-#   - Polls ActiveIdentifier (current input) + Active (on/off) every 2-5 seconds
-#   - Optionally subscribes to push notifications if the TV supports them
+#   - Listens to state changes of the HK Controller media_player entity
+#   - On each change: reads state (on/off) and derives current_identifier
+#     from the position of attributes.source in attributes.source_list (1-based:
+#     first entry = identifier 1, second = identifier 2, etc.)
 #   - Exposes current_source and current_identifier as state attributes
 #     (read by media_player.py and text.py to display the current input)
 #   - Sends all HAP commands (RemoteKey, Volume, Mute, Input switch) via
 #     put_characteristics on the raw connection
+#
+# CHANGES FROM 1.1.0:
+# - Removed HAP polling loop (get_characteristics timer for Active +
+#   ActiveIdentifier) and push subscription attempt entirely.
+# - Removed imports: timedelta, async_track_time_interval.
+# - Removed methods: _try_native_subscription, _poll_active_identifier.
+# - Removed attributes: _subscription_active, _change_reason.
+# - Added: _hk_entity_id stored in __init__; async_added_to_hass now
+#   subscribes to HK Controller media_player state changes only.
+# - Added: _update_from_hk_state derives identifier from source_list
+#   position (1-based). No friendly name fallback — source is always
+#   present in source_list in normal operation.
+# - _get_source_name_for_identifier: matches custom_inputs only;
+#   added media_player_source to recognised command_types; falls back
+#   to "Input N". No raw HK source name lookup anywhere.
+# - extra_state_attributes: removed subscription_active and change_reason.
+# - async_turn_on/off: added async_write_ha_state() after optimistic update.
+# - TVRemote.__init__ signature: removed unused 'name' positional arg.
 #
 # Dependencies:
 #   - Requires homekit_controller to be set up and paired with the TV
@@ -26,17 +47,15 @@
 #     so that switch.py can flip _debug_listen/_debug_send flags without a reload
 
 import asyncio
-from typing import Any, Iterable
+from typing import Iterable
 
 from aiohomekit.model.characteristics import CharacteristicsTypes as CT
-
-from datetime import timedelta
 
 from homeassistant.components.remote import RemoteEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers import entity_registry as er
 import logging
 
@@ -49,7 +68,7 @@ DEBUG_LISTEN = "HOMEKIT_TV_LISTEN"  # Logs about receiving/reading data from TV
 DEBUG_SEND = "HOMEKIT_TV_SEND"      # Logs about sending commands to TV
 
 # ─── HAP Error Status Codes ────────────────────────────────────────────────────
-# These are standard HAP protocol error codes returned by the TV accessory.
+# Standard HAP protocol error codes returned by the TV accessory.
 # Used in _handle_hap_error() to classify errors and set last_hap_error attribute.
 HAP_STATUS_SUCCESS = 0
 HAP_STATUS_INSUFFICIENT_PRIVILEGES = -70401
@@ -64,9 +83,7 @@ HAP_STATUS_RESOURCE_DOES_NOT_EXIST = -70409
 HAP_STATUS_INVALID_VALUE = -70410
 
 # ─── HAP RemoteKey Integer Values ──────────────────────────────────────────────
-# These are the integer values written to the RemoteKey characteristic.
-# Sent as integers via put_characteristics, or as strings ("4", "9" etc.)
-# via async_send_command which parses them with int().
+# Written to RemoteKey characteristic via put_characteristics.
 # 0: Rewind          1: FastForward    2: NextTrack      3: PreviousTrack
 # 4: ArrowUp         5: ArrowDown      6: ArrowLeft      7: ArrowRight
 # 8: Select          9: Back           10: Exit          11: PlayPause
@@ -84,12 +101,15 @@ async def async_setup_entry(
     Called by HA when setting up the remote platform for this config entry.
 
     Steps:
-    1. Look up the homekit_controller media_player entity that was selected
-       during config flow (stored in entry.data["media_player_entity_id"])
+    1. Look up the homekit_controller media_player entity selected during setup
+       (stored in entry.data["media_player_entity_id"])
     2. Find the homekit_controller connection (device) that owns that entity
     3. Walk the TV's accessory/service/characteristic tree to find the 5
-       characteristics we need: RemoteKey, Active, VolumeSelector,
-       ActiveIdentifier, Mute — stored as (aid, iid) tuples for fast access
+       characteristics needed: RemoteKey, Active, VolumeSelector,
+       ActiveIdentifier, Mute — stored as (aid, iid) tuples.
+       ActiveIdentifier is still found for input switching (put) but is
+       never read — the HK Controller entity is the sole source of truth
+       for on/off state and current input.
     4. Create the TVRemote entity and register it in hass.data so switch.py
        can update debug flags without triggering a reload
     """
@@ -143,13 +163,13 @@ async def async_setup_entry(
                 if not rk and t == CT.REMOTE_KEY:
                     rk = (aid, c.iid)         # Write: RemoteKey integer → TV navigation
                 elif not act and t == CT.ACTIVE:
-                    act = (aid, c.iid)         # Read/Write: 1=on, 0=standby
+                    act = (aid, c.iid)         # Write: 1=on, 0=standby
                 elif not vol and t == CT.VOLUME_SELECTOR:
                     vol = (aid, c.iid)         # Write: 0=up, 1=down (2=mute on some TVs)
                 elif not inp and t == CT.ACTIVE_IDENTIFIER:
-                    inp = (aid, c.iid)         # Read/Write: current input index
+                    inp = (aid, c.iid)         # Write: switch input by identifier number
                 elif not mut and t == CT.MUTE:
-                    mut = (aid, c.iid)         # Read/Write: bool mute state
+                    mut = (aid, c.iid)         # Read/Write: mute toggle
 
     # RemoteKey is mandatory — without it the integration has no purpose
     if not rk:
@@ -164,8 +184,9 @@ async def async_setup_entry(
     debug_send = entry.options.get("debug_send", False)
 
     entity = TVRemote(
-        hass, entry.entry_id, entry.title, conn, rk, act, vol, inp, mut,
-        debug_listen, debug_send, entry
+        hass, entry.entry_id, conn, rk, act, vol, inp, mut,
+        debug_listen, debug_send, entry,
+        hk_entity_id=entity_id
     )
 
     # Store reference so DebugListenSwitch / DebugSendSwitch in switch.py
@@ -181,13 +202,21 @@ async def async_setup_entry(
 
 class TVRemote(RemoteEntity):
     """
-    Remote entity that communicates directly with the Sony TV via HAP.
+    Remote entity that sends HAP commands directly to the TV but derives its
+    state (on/off and current input) from the HomeKit Controller media_player
+    entity — no HAP polling or push subscription.
 
-    Entity ID: remote.homekit_tv (hardcoded via unique_id = entry.entry_id)
-    State:     on/off (polled from Active characteristic)
-    Attributes: current_source, current_identifier, subscription_active,
-                change_reason, last_hap_error
-    
+    State source:
+      The HomeKit Controller media_player (hk_entity_id) is listened to via
+      async_track_state_change_event. On each change:
+        - state string → is_on (True if "on", False otherwise)
+        - attributes.source looked up in attributes.source_list:
+          identifier = source_list.index(source) + 1  (1-based)
+          → self._current_identifier (integer)
+
+    Entity ID: remote.<slug> (derived from tv_name in __init__.py)
+    Attributes: current_source, current_identifier, last_hap_error
+
     Commands accepted by async_send_command():
       - Integer strings: "4" "5" "6" "7" "8" "9" "11" etc. → RemoteKey
       - "volume_up" / "vol_up"   → VolumeSelector = 0
@@ -196,14 +225,14 @@ class TVRemote(RemoteEntity):
       - "input_N" / "hdmi_N"      → ActiveIdentifier = N
     """
 
-    _attr_should_poll = False   # We do our own polling via async_track_time_interval
-    _attr_assumed_state = False  # State is confirmed by polling Active characteristic every 2-5s
+    _attr_should_poll = False
+    _attr_assumed_state = False
 
-    def __init__(self, hass, uid, name, conn, rk, act, vol, inp, mut,
-                 debug_listen, debug_send, config_entry):
+    def __init__(self, hass, uid, conn, rk, act, vol, inp, mut,
+                 debug_listen, debug_send, config_entry, hk_entity_id):
         """Store all HAP characteristic tuples and initialize state."""
         self.hass = hass
-        self._attr_unique_id = uid          # entry.entry_id → entity id: remote.homekit_tv
+        self._attr_unique_id = uid
         self._attr_name = config_entry.data.get("tv_name", "Homekit TV")
         self._attr_device_info = {
             "identifiers": {("homekit_tv_remote", uid)},
@@ -214,42 +243,37 @@ class TVRemote(RemoteEntity):
         # HAP connection and characteristic (aid, iid) tuples
         self._conn = conn   # homekit_controller connection object
         self._rk = rk       # RemoteKey characteristic
-        self._act = act     # Active characteristic (on/off)
+        self._act = act     # Active characteristic (write only — on/off)
         self._vol = vol     # VolumeSelector characteristic
-        self._inp = inp     # ActiveIdentifier characteristic (current input)
+        self._inp = inp     # ActiveIdentifier characteristic (write only — input switch)
         self._mut = mut     # Mute characteristic
 
+        # HK Controller media_player entity ID to listen to for state + source
+        self._hk_entity_id = hk_entity_id
+
         # State
-        self._attr_is_on = True             # Assumed on until first poll
-        self._current_identifier = None     # Current TV input index (int)
+        self._attr_is_on = True             # Assumed on until first HK entity read
+        self._current_identifier = None     # Integer derived from source_list position
 
         # Debug flags — flipped live by DebugListenSwitch / DebugSendSwitch
         self._debug_listen = debug_listen
         self._debug_send = debug_send
 
         self._config_entry = config_entry
-        self._subscription_active = False   # Whether push subscription succeeded
-        self._change_reason = None          # "POLL" or "EVENT" — how last update arrived
         self._last_error_status = None      # Last HAP error code (shown in attributes)
 
-        # Lock prevents two commands running concurrently (e.g. rapid button presses)
+        # Lock prevents concurrent non-RemoteKey commands (volume, mute, input switch)
         self._command_lock = asyncio.Lock()
 
     # ─── Debug Logging Helpers ─────────────────────────────────────────────────
 
     def _log_listen(self, message, *args):
-        """
-        Log a receive/listen event at WARNING level (so it appears without debug mode).
-        Only logs if _debug_listen is True (toggled by DebugListenSwitch in switch.py).
-        """
+        """Log a listen/receive event. Only logs if _debug_listen is True."""
         if self._debug_listen:
             _LOGGER.warning(f"[{DEBUG_LISTEN}] {message}", *args)
 
     def _log_send(self, message, *args):
-        """
-        Log a send/command event at WARNING level.
-        Only logs if _debug_send is True (toggled by DebugSendSwitch in switch.py).
-        """
+        """Log a send/command event. Only logs if _debug_send is True."""
         if self._debug_send:
             _LOGGER.warning(f"[{DEBUG_SEND}] {message}", *args)
 
@@ -288,20 +312,19 @@ class TVRemote(RemoteEntity):
 
     @property
     def is_on(self):
-        """Return on/off state (updated by _poll_active_identifier via Active char)."""
+        """Return on/off state (updated by _update_from_hk_state)."""
         return self._attr_is_on
 
     @property
     def extra_state_attributes(self):
         """
-        Expose diagnostic and source info as entity attributes.
-        
-        current_source:      Friendly name of the active TV input (from custom_inputs)
-        current_identifier:  Raw integer from ActiveIdentifier HAP characteristic
-        subscription_active: Whether push notification subscription succeeded
-        change_reason:       "POLL" or "EVENT" — how the last update was received
-        last_hap_error:      Last HAP error code (only present when an error occurred)
-        
+        Expose source info and diagnostics as entity attributes.
+
+        current_source:     User's custom name for the active input (from custom_inputs),
+                            or "Input N" if no custom name is saved for this identifier.
+        current_identifier: Integer derived from source_list position (1-based).
+        last_hap_error:     Last HAP error code (only present when an error occurred).
+
         current_source and current_identifier are read by:
           - media_player.py (remote_state_changed callback) to update self._source
           - text.py (CurrentIdentifierTextEntity) to display the current input
@@ -313,8 +336,6 @@ class TVRemote(RemoteEntity):
         attrs = {
             "current_source": source,
             "current_identifier": self._current_identifier,
-            "subscription_active": self._subscription_active,
-            "change_reason": self._change_reason,
         }
 
         if self._last_error_status is not None:
@@ -322,152 +343,95 @@ class TVRemote(RemoteEntity):
 
         return attrs
 
-    # ─── Subscription and Polling ──────────────────────────────────────────────
+    # ─── HK Entity State Listener ──────────────────────────────────────────────
 
     async def async_added_to_hass(self):
         """
-        Called by HA once the entity is registered.
-
-        1. Do an immediate poll to get the current input and power state
-        2. Attempt a single native push subscription via _try_native_subscription().
-           If the TV/connection supports it, the callback updates state immediately
-           on input change without waiting for the next poll.
-        3. Always set up a polling fallback timer regardless of subscription result
-           - 5s interval if subscription succeeded (subscription is primary)
-           - 2s interval if subscription failed (polling is the only mechanism)
+        Subscribe to HomeKit Controller media_player state changes.
+        Reads current state immediately so entity reflects reality on startup.
+        No HAP polling or push subscription is set up here.
         """
-        if not self._inp:
-            # No ActiveIdentifier characteristic found — polling impossible
-            return
 
-        # Immediate initial read so entity shows correct state right away
-        await self._poll_active_identifier()
+        @callback
+        def hk_state_changed(event):
+            """Called whenever the HK Controller media_player changes state."""
+            new_state = event.data.get("new_state")
+            if new_state is None:
+                return
+            self._update_from_hk_state(new_state)
 
-        # Attempt push subscription via native aiohomekit callback.
-        # Falls back to polling timer below if not supported.
-        try:
-            if await self._try_native_subscription():
-                self._subscription_active = True
-                self._log_listen("Successfully subscribed to ActiveIdentifier push notifications")
-            else:
-                self._log_listen("Native subscription not supported, using polling fallback")
-        except Exception as e:
-            self._log_listen("Native subscription failed, using polling fallback: %s", e)
-
-        # Always register polling timer as safety net
-        poll_interval = timedelta(seconds=5) if self._subscription_active else timedelta(seconds=2)
         self.async_on_remove(
-            async_track_time_interval(self.hass, self._poll_active_identifier, poll_interval)
+            async_track_state_change_event(
+                self.hass, self._hk_entity_id, hk_state_changed
+            )
         )
 
-    async def _try_native_subscription(self) -> bool:
+        # Immediate read on startup
+        hk_state = self.hass.states.get(self._hk_entity_id)
+        if hk_state:
+            self._update_from_hk_state(hk_state)
+            self.async_write_ha_state()
+
+    def _update_from_hk_state(self, hk_state) -> None:
         """
-        Attempt to subscribe to ActiveIdentifier push notifications via
-        the homekit_controller connection's subscribe_characteristics method.
-        
-        If the connection also supports add_char_subscription_callback, registers
-        a callback that updates _current_identifier immediately when the TV
-        sends a notification (e.g. user changes input via TV remote).
-        
-        Returns True if subscription + callback registration succeeded.
-        Returns False if the connection does not support subscribe_characteristics
-        or add_char_subscription_callback.
+        Extract on/off state and current input identifier from a HK Controller
+        media_player state object.
+
+        Power state:
+          "on"  → is_on = True
+          anything else (off, standby, unavailable) → is_on = False
+
+        Identifier:
+          source_list is 1-based: identifier = source_list.index(source) + 1
+          e.g. source_list = ["TV", "HDMI 1", ..., "Apple TV", ...]
+               source = "Apple TV" at position 8 (1-based) → identifier = 8
+          If source or source_list is absent (TV unavailable), identifier
+          is left unchanged.
         """
-        if not hasattr(self._conn, 'subscribe_characteristics'):
-            return False
+        # ── Power state ────────────────────────────────────────────────────────
+        new_is_on = hk_state.state == "on"
+        if new_is_on != self._attr_is_on:
+            self._attr_is_on = new_is_on
+            self._log_listen(
+                "Power state updated from HK entity: %s", "ON" if new_is_on else "OFF"
+            )
+            self.async_write_ha_state()
 
-        await self._conn.subscribe_characteristics([(self._inp[0], self._inp[1])])
+        # ── Current input identifier ───────────────────────────────────────────
+        source = hk_state.attributes.get("source")
+        source_list = hk_state.attributes.get("source_list", [])
 
-        if hasattr(self._conn, 'add_char_subscription_callback'):
-            @callback
-            def characteristic_changed(char_changes):
-                """
-                Callback fired by aiohomekit when a subscribed characteristic changes.
-                char_changes: dict of {(aid, iid): value_or_dict}
-                """
-                for (aid, iid), data in char_changes.items():
-                    if (aid, iid) == self._inp:
-                        # data may be a raw value or a dict with "value" and "reason"
-                        if isinstance(data, dict):
-                            new_value = data.get("value")
-                            self._change_reason = data.get("reason", "EVENT")
-                        else:
-                            new_value = data
-                            self._change_reason = "EVENT"
-
-                        if new_value is not None and new_value != self._current_identifier:
-                            self._current_identifier = new_value
-                            source_name = self._get_source_name_for_identifier(new_value)
-                            self._log_listen(
-                                "ActiveIdentifier changed via subscription: %s → %s (reason: %s)",
-                                new_value, source_name, self._change_reason
-                            )
-                            self.async_write_ha_state()
-
-            self._conn.add_char_subscription_callback(characteristic_changed)
-            return True
-
-        return False
-
-    async def _poll_active_identifier(self, now=None):
-        """
-        Read ActiveIdentifier (current input) and Active (on/off) from the TV via HAP.
-        Called on a timer (every 2s or 5s) and once immediately on startup.
-        
-        Only calls async_write_ha_state() if a value actually changed,
-        to avoid unnecessary state updates.
-        
-        now: passed by async_track_time_interval, ignored (signature required by HA).
-        """
-        try:
-            # Build list of chars to read in a single get_characteristics call
-            chars_to_read = [(self._inp[0], self._inp[1])]
-            if self._act:
-                chars_to_read.append((self._act[0], self._act[1]))
-
-            result = await self._conn.get_characteristics(chars_to_read)
-
-            # ── Update current input (ActiveIdentifier) ────────────────────────
-            value = result.get((self._inp[0], self._inp[1]), {}).get("value")
-            if value is not None and value != self._current_identifier:
-                self._current_identifier = value
-                self._change_reason = "POLL"
-                source_name = self._get_source_name_for_identifier(value)
-                self._log_listen(
-                    "ActiveIdentifier updated via poll: %s → %s", value, source_name
+        if source and source_list:
+            try:
+                # 1-based: first item in list = identifier 1
+                identifier = source_list.index(source) + 1
+                if identifier != self._current_identifier:
+                    self._current_identifier = identifier
+                    self._log_listen(
+                        "Input updated from HK entity: '%s' → input_%s",
+                        source, identifier
+                    )
+                    self.async_write_ha_state()
+            except ValueError:
+                # source not found in source_list — should not happen in normal operation
+                _LOGGER.warning(
+                    "remote.py: source '%s' not found in source_list, identifier unchanged",
+                    source
                 )
-                self.async_write_ha_state()
-
-            # ── Update power state (Active) ────────────────────────────────────
-            if self._act:
-                active_value = result.get((self._act[0], self._act[1]), {}).get("value")
-                if active_value is not None:
-                    new_state = bool(active_value)
-                    if new_state != self._attr_is_on:
-                        self._attr_is_on = new_state
-                        self._log_listen(
-                            "Active state updated via poll: %s", "ON" if new_state else "OFF"
-                        )
-                        self.async_write_ha_state()
-
-        except Exception as e:
-            self._handle_hap_error(e, "poll Active/ActiveIdentifier")
 
     # ─── Source Name Resolution ────────────────────────────────────────────────
 
     def _get_source_name_for_identifier(self, identifier):
         """
-        Resolve an ActiveIdentifier integer to a friendly source name.
-        
-        Looks through custom_inputs (saved by the user via button.py) and matches:
-          - hap inputs:   parses the number from command like "input_9" → 9
-          - remote/media_player inputs: matches the explicit "identifier" field
-            saved when the user filled in the HAP Identifier field in text.py
-        
-        Falls back to "Input N" if no match found.
-        
-        Called by extra_state_attributes, _poll_active_identifier, and
-        the push subscription callback.
+        Resolve a HAP identifier integer to the user's custom name from custom_inputs.
+
+        Matching rules:
+          - hap inputs: parses identifier from command string e.g. "input_9" → 9
+          - remote / media_player / media_player_source inputs: matches the
+            explicit "identifier" field saved when the user configured the input
+
+        Falls back to "Input N" if no custom_inputs entry matches.
+        No raw HK source name is used here.
         """
         custom_inputs = self._config_entry.options.get("custom_inputs", [])
 
@@ -476,15 +440,13 @@ class TVRemote(RemoteEntity):
             command_type = inp.get("command_type", "")
 
             if command_type == "hap" and (command.startswith("input_") or command.startswith("hdmi_")):
-                # Extract integer from "input_9" → 9
                 try:
                     input_num = int(command.split("_")[1])
                     if input_num == identifier:
                         return inp["name"]
                 except (ValueError, IndexError):
                     pass
-            elif command_type in ("remote", "media_player"):
-                # Match via explicit identifier field set by user
+            elif command_type in ("remote", "media_player", "media_player_source"):
                 explicit_id = inp.get("identifier")
                 if explicit_id is not None and int(explicit_id) == identifier:
                     return inp["name"]
@@ -494,30 +456,26 @@ class TVRemote(RemoteEntity):
     # ─── Power Control ─────────────────────────────────────────────────────────
 
     async def async_turn_on(self, **_):
-        """
-        Turn TV on by writing Active=1 to the Active characteristic.
-        Updates local state optimistically on success.
-        """
+        """Turn TV on by writing Active=1 to the Active characteristic."""
         if self._act:
             try:
                 self._log_send("Turning TV ON (Active=1)")
                 await self._conn.put_characteristics([(self._act[0], self._act[1], 1)])
                 self._attr_is_on = True
                 self._last_error_status = HAP_STATUS_SUCCESS
+                self.async_write_ha_state()
             except Exception as e:
                 self._handle_hap_error(e, "turn on")
 
     async def async_turn_off(self, **_):
-        """
-        Turn TV off by writing Active=0 to the Active characteristic.
-        Updates local state optimistically on success.
-        """
+        """Turn TV off by writing Active=0 to the Active characteristic."""
         if self._act:
             try:
                 self._log_send("Turning TV OFF (Active=0)")
                 await self._conn.put_characteristics([(self._act[0], self._act[1], 0)])
                 self._attr_is_on = False
                 self._last_error_status = HAP_STATUS_SUCCESS
+                self.async_write_ha_state()
             except Exception as e:
                 self._handle_hap_error(e, "turn off")
 
@@ -569,19 +527,19 @@ class TVRemote(RemoteEntity):
     async def _send_command_internal(self, command: Iterable[str], **kw) -> None:
         """
         Parse and dispatch a list of command strings.
-        
+
         Supported command formats:
-          "4" .. "16"          → RemoteKey integer (HAP navigation keys)
-          "volume_up"/"vol_up" → VolumeSelector = 0
+          "4" .. "16"            → RemoteKey integer (HAP navigation keys)
+          "volume_up"/"vol_up"   → VolumeSelector = 0
           "volume_down"/"vol_down" → VolumeSelector = 1
-          "mute"               → toggle Mute char; fallback to VolumeSelector=2
-          "input_N"/"hdmi_N"   → ActiveIdentifier = N (switch TV input)
-        
+          "mute"                 → toggle Mute char; fallback to VolumeSelector=2
+          "input_N"/"hdmi_N"     → ActiveIdentifier = N (switch TV input)
+
         kwargs:
           delay_secs: float — delay between commands when sending multiple (default 0.05s)
           hold_secs:  float — hold time for button press (default 0 = instant)
-        
-        Called with lock already held by async_send_command.
+
+        Called with lock already held by async_send_command (except plain int commands).
         """
         delay = kw.get("delay_secs", 0.05)   # 50ms between multiple commands
         hold_time = kw.get("hold_secs", 0)    # 0 = instant press
@@ -613,7 +571,7 @@ class TVRemote(RemoteEntity):
                     # ── Mute ───────────────────────────────────────────────────
                     elif c == "mute":
                         if self._mut:
-                            # Read current state then toggle (true mute toggle)
+                            # Read current mute state then toggle
                             self._log_send("Sending Mute Toggle via MUTE characteristic")
                             result = await self._conn.get_characteristics(
                                 [(self._mut[0], self._mut[1])]
