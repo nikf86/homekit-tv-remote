@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root{
+    --bg:#111213;
+    --surface:#1c1c1e;
+    --surface-2:#242426;
+    --line:#333336;
+    --text:#e6e6e8;
+    --dim:#9a9aa0;
+    --accent:#38bdf8;
+    --accent-dim:#0e7490;
+    --good:#4ade80;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);
+       font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  .shot{padding:28px;display:inline-block}
+  .dialog{width:560px;background:var(--surface);border-radius:20px;
+          box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden;color:var(--text)}
+  .bar{display:flex;align-items:center;gap:16px;padding:20px 24px 8px}
+  .bar .x{font-size:22px;color:var(--dim);line-height:1}
+  .bar h2{font-size:20px;font-weight:500;margin:0;flex:1}
+  .bar .q{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--dim);
+          color:var(--dim);font-size:15px;display:flex;align-items:center;justify-content:center}
+  .body{padding:6px 24px 22px}
+  .desc{font-size:14.5px;line-height:1.55;color:var(--dim);margin:6px 0 20px}
+  .desc b{color:var(--text);font-weight:600}
+  .row{display:flex;align-items:center;gap:14px;padding:14px 6px;
+       border-bottom:1px solid var(--line);cursor:default}
+  .row:last-child{border-bottom:none}
+  .row .t{flex:1}
+  .row .t .n{font-size:15.5px}
+  .row .t .s{font-size:13px;color:var(--dim);margin-top:3px;line-height:1.4}
+  .row .c{color:var(--dim);font-size:18px}
+  .field{margin-bottom:18px}
+  .label{font-size:12.5px;color:var(--accent);margin-bottom:6px}
+  .input{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+         padding:13px 14px;font-size:15px;display:flex;align-items:center;gap:10px}
+  .input .ph{color:var(--dim)}
+  .input .car{margin-left:auto;color:var(--dim);font-size:12px}
+  .help{font-size:12.5px;color:var(--dim);margin-top:6px;line-height:1.45}
+  .check{display:flex;align-items:center;gap:13px;padding:11px 4px;font-size:15px}
+  .box{width:20px;height:20px;border-radius:5px;border:2px solid var(--dim);flex:none}
+  .box.on{background:var(--accent);border-color:var(--accent);position:relative}
+  .box.on:after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;
+                border:solid #06202b;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+  .radio{width:20px;height:20px;border-radius:50%;border:2px solid var(--dim);flex:none}
+  .radio.on{border-color:var(--accent);position:relative}
+  .radio.on:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+  .sw{width:38px;height:22px;border-radius:11px;background:#4a4a4e;flex:none;position:relative}
+  .sw.on{background:var(--accent)}
+  .sw:after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;
+            border-radius:50%;background:#fff}
+  .sw.on:after{left:19px}
+  .banner{background:rgba(74,222,128,.12);border:1px solid rgba(74,222,128,.35);
+          color:var(--good);border-radius:10px;padding:12px 14px;font-size:14px;margin-bottom:18px}
+  .actions{display:flex;justify-content:flex-end;padding:4px 24px 20px}
+  .btn{color:var(--accent);font-size:14.5px;font-weight:600;letter-spacing:.4px;
+       padding:9px 14px;border-radius:8px}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- 1. MENU -->
+<div class="shot" id="menu"><div class="dialog">
+  <div class="bar"><span class="x">✕</span><h2>HomeKit TV Remote</h2><span class="q">?</span></div>
+  <div class="body">
+    <div class="desc">Changes take effect immediately. Press <b>Reload HomeKit Bridge</b> on the
+      device page once you are finished, so Apple Home picks up the new list.</div>
+    <div class="row"><div class="t"><div class="n">TV inputs</div>
+      <div class="s">Tick the inputs your TV reports, and test one before committing.</div></div>
+      <div class="c">›</div></div>
+    <div class="row"><div class="t"><div class="n">Add a shortcut</div>
+      <div class="s">Add an app or another integration's command as an input.</div></div>
+      <div class="c">›</div></div>
+    <div class="row"><div class="t"><div class="n">Manage saved inputs</div>
+      <div class="s">Rename, reorder or remove what you have configured.</div></div>
+      <div class="c">›</div></div>
+    <div class="row"><div class="t"><div class="n">Manual</div>
+      <div class="s">Open the full documentation.</div></div>
+      <div class="c">›</div></div>
+  </div>
+</div></div>
+
+<!-- 2. TV INPUTS -->
+<div class="shot" id="tvinputs"><div class="dialog">
+  <div class="bar"><span class="x">✕</span><h2>TV inputs</h2><span class="q">?</span></div>
+  <div class="body">
+    <div class="desc">These are the inputs your TV reports over HomeKit. Ticked ones appear in
+      Apple Home, in the Home Assistant source list, and in the ⓘ Info button cycle.<br><br>
+      Not sure which is which? Pick one under <b>Test</b> and submit — the TV switches to it and
+      this form stays open. Nothing is saved while testing.</div>
+    <div class="label">Inputs to show</div>
+    <div class="check"><span class="box on"></span>TV</div>
+    <div class="check"><span class="box on"></span>HDMI 1 / Apple TV</div>
+    <div class="check"><span class="box on"></span>HDMI 2 / PlayStation 5</div>
+    <div class="check"><span class="box"></span>HDMI 3</div>
+    <div class="check"><span class="box on"></span>HDMI 4 / Sky Q</div>
+    <div class="check"><span class="box"></span>Screen mirroring</div>
+    <div class="help" style="margin-bottom:20px">Nothing to type: the names and their HomeKit
+      identifiers are read from the TV itself.</div>
+    <div class="field">
+      <div class="label">Test — switch the TV to this now</div>
+      <div class="input"><span class="ph">HDMI 3</span><span class="car">▾</span></div>
+      <div class="help">Leave empty to save your selection instead.</div>
+    </div>
+  </div>
+  <div class="actions"><span class="btn">SUBMIT</span></div>
+</div></div>
+
+<!-- 3. SHORTCUT, FILLED FOR APPLE TV -->
+<div class="shot" id="shortcut"><div class="dialog">
+  <div class="bar"><span class="x">✕</span><h2>Add a shortcut</h2><span class="q">?</span></div>
+  <div class="body">
+    <div class="desc">A shortcut is an input that drives another integration — launching Netflix
+      on an Apple TV, or sending a CEC command through a vendor remote.<br><br>
+      Tick <b>Test</b> to fire it once without saving.</div>
+    <div class="banner">Sent. If the TV did what you expected, clear Test and submit to save.</div>
+    <div class="field"><div class="label">Name</div>
+      <div class="input">Netflix</div>
+      <div class="help">Shown in Apple Home and in the Home Assistant source list.</div></div>
+    <div class="field"><div class="label">Target entity</div>
+      <div class="input">Apple TV<span class="car">▾</span></div>
+      <div class="help">The media player or remote entity that carries out the action.</div></div>
+    <div class="field"><div class="label">What to send</div>
+      <div class="input">Netflix</div>
+      <div class="help">An app name for a media player, or a command name for a remote. The right
+        service is chosen automatically.</div></div>
+    <div class="field"><div class="label">Switch TV to this input first</div>
+      <div class="input">HDMI 1 / Apple TV<span class="car">▾</span></div>
+      <div class="help">Optional. Use it when the TV also has to change input first.</div></div>
+    <div class="check" style="padding-top:4px"><span class="sw on"></span>Test without saving</div>
+  </div>
+  <div class="actions"><span class="btn">SUBMIT</span></div>
+</div></div>
+
+<!-- 4. REORDER -->
+<div class="shot" id="reorder"><div class="dialog">
+  <div class="bar"><span class="x">✕</span><h2>Change the order</h2><span class="q">?</span></div>
+  <div class="body">
+    <div class="desc">This is the order the ⓘ Info button and the Next input button step through.
+      Move one input at a time — the list is renumbered each time, so you can keep going until it
+      reads the way you want.</div>
+    <div class="banner">Moved. The list below is renumbered — move another, or close this dialog.</div>
+    <div class="field"><div class="label">Input to move</div>
+      <div class="input">3.&nbsp; Netflix — HDMI 1 / Apple TV → media_player.apple_tv → Netflix
+        <span class="car">▾</span></div>
+      <div class="help">Numbered in the current cycle order.</div></div>
+    <div class="label">Move it</div>
+    <div class="check"><span class="radio"></span>To the top</div>
+    <div class="check"><span class="radio on"></span>Up one</div>
+    <div class="check"><span class="radio"></span>Down one</div>
+    <div class="check"><span class="radio"></span>To the bottom</div>
+  </div>
+  <div class="actions"><span class="btn">SUBMIT</span></div>
+</div></div>
+
+<!-- 5. MANAGE SUBMENU -->
+<div class="shot" id="manage"><div class="dialog">
+  <div class="bar"><span class="x">✕</span><h2>Manage saved inputs</h2><span class="q">?</span></div>
+  <div class="body">
+    <div class="desc">Everything you have configured, in cycle order.</div>
+    <div class="row"><div class="t"><div class="n">Rename an input</div>
+      <div class="s">Change the label only — what the input does stays the same.</div></div>
+      <div class="c">›</div></div>
+    <div class="row"><div class="t"><div class="n">Change the order</div>
+      <div class="s">Move one input up or down in the ⓘ cycle.</div></div>
+      <div class="c">›</div></div>
+    <div class="row"><div class="t"><div class="n">Remove inputs</div>
+      <div class="s">Delete inputs you no longer want.</div></div>
+      <div class="c">›</div></div>
+  </div>
+</div></div>
+
+</body>
+</html>

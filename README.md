@@ -1,213 +1,345 @@
-# HomeKit TV Remote
+<p align="center">
+  <img src="brands/custom_integrations/homekit_tv_remote/icon.png" width="132" alt="HomeKit TV Remote">
+</p>
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![GitHub release](https://img.shields.io/github/release/nikf86/homekit-tv-remote.svg)](https://github.com/nikf86/homekit-tv-remote/releases)
-[![HACS installs](https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote)](https://github.com/nikf86/homekit-tv-remote)
+<h1 align="center">HomeKit TV Remote</h1>
 
-Control your TV directly over HAP — the same protocol Apple devices use — giving you a native HA remote entity and the full iOS/iPadOS remote widget in Control Center.
+<p align="center">
+  Control your TV over HAP — the same protocol Apple devices use — for a native Home Assistant
+  remote entity and the full iOS/iPadOS remote widget in Control Center.
+</p>
+
+<p align="center">
+  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg" alt="HACS"></a>
+  <a href="https://github.com/nikf86/homekit-tv-remote/releases"><img src="https://img.shields.io/github/release/nikf86/homekit-tv-remote.svg" alt="Release"></a>
+  <a href="https://github.com/nikf86/homekit-tv-remote"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote" alt="HACS installs"></a>
+</p>
 
 ---
 
-## What It Does
+## What it does
 
-- **Full remote control over HAP** — D-pad, back, home, play/pause, volume, mute, and input switching, all sent directly over the HomeKit Accessory Protocol. No vendor app, no IP remote — just the same channel Apple devices use, with the priority that comes with it.
-- **iOS/iPadOS remote widget with input cycling** — your TV appears as a Television accessory in Apple Home, unlocking the native remote widget in Control Center. The ⓘ Info button cycles through your saved inputs in order. You control exactly which inputs are visible in Apple Home and which are included in the cycle — per input, with a simple toggle.
-- **Any input, any integration** — save HDMI and CEC inputs directly via HAP, or connect any third-party remote or media player entity (Bravia, Apple TV, and others) to switch sources and launch apps from the same unified list.
-- **Test before saving** — fire any command from the configuration fields before committing it, so you know it works before it goes into your setup.
+- **Full remote over HAP.** D-pad, select, back, exit, play/pause, transport keys, volume, mute and input switching, written straight onto your TV's HomeKit characteristics. No vendor app, no IP remote — the same channel and the same priority as an Apple device.
+- **The iOS remote widget, with input cycling.** Your TV appears as a Television accessory in Apple Home, which unlocks the Control Center remote. The ⓘ Info button steps through your chosen inputs — the one thing Apple's widget otherwise can't do.
+- **Any input, any integration.** Your TV's own inputs come from the TV itself; you just tick the ones you want. Everything else — Apple TV apps, Bravia apps, vendor CEC commands — is a shortcut you add in one form.
+- **Test before you commit.** Both the TV inputs screen and the shortcut form can fire a command once, without saving.
+
+**It never asks the TV what it's doing.** Power state and current input come from the HomeKit Device entity Home Assistant already keeps up to date; input numbers come from the accessory description already held in memory. The TV only ever receives.
 
 ---
 
 ## Requirements
 
-- Home Assistant 2026.3 or later
-- TV already paired via the [HomeKit Device](https://www.home-assistant.io/integrations/homekit_controller/) integration
-- HomeKit Bridge integration configured in HA
+| | |
+|---|---|
+| Home Assistant | 2026.8 or later |
+| Your TV | paired through the [HomeKit Device](https://www.home-assistant.io/integrations/homekit_controller/) integration |
+| For the iOS widget | [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) configured |
 
 ---
 
-## Installation
+## Install
 
-**HACS:** Add this repo as a custom repository (category: Integration), install, restart HA, then go to **Settings → Devices & Services → Add Integration → HomeKit TV Remote**.
+**HACS** — add this repo as a custom repository (category: Integration), install, restart, then **Settings → Devices & Services → Add Integration → HomeKit TV Remote**.
 
-**Manual:** Copy `custom_components/homekit_tv_remote/` into your `config/custom_components/` directory and restart.
+**Manual** — copy `custom_components/homekit_tv_remote/` into `config/custom_components/` and restart. Copy the whole folder, **including `translations/`** — without it every dialog renders with no text.
 
 ---
 
-## Setup
+## Setup in four steps
 
-1. Select your TV's HomeKit Device `media_player` entity and give it a name (e.g. `Sony TV` → entities become `remote.sony_tv`, `media_player.sony_tv`)
+**1. Add the integration.** Pick your paired TV and give it a name. `Sony TV` produces `remote.sony_tv` and `media_player.sony_tv`.
 
-2. Expose the integration's `media_player` to HomeKit Bridge **in accessory mode** — this is what enables the iOS remote widget. Replace `Your TV Name` and `your_tv_name` with the name you entered during setup:
+**2. Expose the media player to HomeKit Bridge in accessory mode.** This is what gives you the iOS widget — bridge mode will not.
 
 ```yaml
 homekit:
-  - name: Your TV Name
+  - name: Sony TV
     mode: accessory
     filter:
       include_entities:
-        - media_player.your_tv_name
+        - media_player.sony_tv
 ```
 
-Restart HA and pair the new accessory in Apple Home.
+Restart Home Assistant and pair the new accessory in Apple Home.
 
+**3. Choose your inputs** in **Configure** (below).
+
+**4. Press Reload HomeKit Bridge** on the device page, then force-close and reopen the Apple Home app.
 
 ---
 
-## Adding Inputs
+## The Configure dialog
 
-Everything is in the **Configuration section** of the device page. The workflow is:
+Everything lives in one place: **Settings → Devices & Services → HomeKit TV Remote → Configure**. Changes take effect the moment you submit — no reload, no waiting.
 
-1. Fill in the fields for your input
-2. Press **1f. Test Command** to verify it works
-3. Press **1g. Save Input**
-4. Turn ON the **Include: \<name\>** switch to make it appear in HomeKit and the input cycle
-5. Press **Reload HomeKit YAML** when you are done — applies all changes and re-registers the TV with Apple Home
-6. Force-close and reopen the **Apple Home app** on your iPhone/iPad for changes to appear
+<p align="center"><img src="docs/img/menu.png" width="520" alt="Configure menu"></p>
 
-| Field | Purpose |
+### TV inputs
+
+Your TV's real inputs, already listed. Tick the ones you want in Apple Home, the Home Assistant source list, and the ⓘ cycle.
+
+Not sure whether *HDMI 3* is the Xbox or the soundbar passthrough? Pick it under **Test** and submit — the TV switches to it and the form stays open. Nothing is saved while testing.
+
+<p align="center"><img src="docs/img/tvinputs.png" width="520" alt="TV inputs"></p>
+
+There is nothing to type and no identifier numbers to look up. The integration reads each input's name and its HomeKit identifier straight from the accessory.
+
+### Add a shortcut
+
+An input that drives another integration instead of the TV's own input switch.
+
+| Field | What it is |
 |---|---|
-| **1a. Input Name** | Display name shown in HomeKit and HA |
-| **1b. Command** | HAP command (e.g. `input_9`) or vendor remote command (e.g. `Hdmi2`) |
-| **1c. App Name** | App name for media player launches (e.g. `Netflix`) |
-| **1d. Input Type** | `hap`, a `remote.*` entity, or a `media_player.*` entity |
-| **1e. HAP Identifier** | The number your TV reports for this input — read it from **1i. Current Identifier** while the input is active |
-| **1f. Test Command** | Fires the command immediately without saving — works for all input types |
-| **1g. Save Input** | Saves the input |
-| **1h. Delete Last Input** | Removes the last saved input |
-| **1i. Current Identifier** | Live read-out of the TV's current input and its HAP number |
-| **Include: \<name\>** | Controls whether this input appears in HomeKit and the cycle |
-| **Next Saved Input** | Cycles to the next enabled input — same as the iOS ⓘ Info button |
-| **Reload HomeKit YAML** | Applies all pending changes then re-registers the TV with Apple Home — press once when done |
+| **Name** | What you see in Apple Home and in `source_list` |
+| **Target entity** | Any `media_player.*` or `remote.*` entity, from any integration |
+| **What to send** | An app name for a media player, or a command name for a remote |
+| **Switch TV to this input first** | Optional — when the TV must also change input, e.g. to the Apple TV's HDMI port |
+| **Test** | Fires it once without saving, and reports back in the form |
 
-### Apple TV specifics
+<p align="center"><img src="docs/img/shortcut.png" width="520" alt="Add a shortcut"></p>
 
-The Apple TV integration works differently from other media players — it only supports `select_source` for launching apps, not `play_media`. Two switches handle this automatically when saving an Apple TV input:
+> **There is no Apple TV switch any more.** When the target is a media player, the integration checks that entity's own `source_list` at the moment the shortcut runs: if your app name is in it, the app is launched with `select_source`; otherwise with `play_media`. That's correct for Apple TV, for Bravia, and for anything else, without you flagging it.
 
-**1. Apple TV App** — turn this ON before saving. It tells the integration to use `select_source` instead of `play_media`. Without it, app launching will silently do nothing.
+### Manage saved inputs
 
-**1. Apple TV Input** — optional. Turn this ON if you also want the TV to automatically switch its HDMI input to the Apple TV port before launching the app. For this to work, fill in **1e. HAP Identifier** with the number your TV reports for the Apple TV HDMI port — you can read it from **1i. Current Identifier** while that input is active on your TV.
+<p align="center"><img src="docs/img/manage.png" width="520" alt="Manage saved inputs"></p>
 
-Both switches reset to OFF on every reload — they are per-save toggles, not persistent settings.
+**Rename** changes the label only. What the input does, and where it sits in the cycle, are untouched. The form comes back after each rename so you can do several.
 
-> App names are case-sensitive and must match exactly. The easiest way to find them: **Developer Tools → Actions → `media_player.select_source`** → pick your Apple TV entity — the source dropdown lists every installed app with the exact string to use.
+**Change the order** moves one input at a time — to the top, up one, down one, to the bottom. The list is renumbered every time, so you can keep nudging until it reads the way you want. This is the order the ⓘ button and the Next input button step through.
+
+<p align="center"><img src="docs/img/reorder.png" width="520" alt="Change the order"></p>
+
+**Remove** deletes inputs. Nothing is pre-ticked, so submitting as-is changes nothing.
 
 ---
 
-## Input Examples
+## Worked example: Apple TV
 
-**HDMI / CEC input**
-Switch to the input on your TV, read its number from **1i. Current Identifier**, then fill in:
-`1b. Command` = `input_9` · `1d. Input Type` = `hap`
+The most common setup, end to end. Assume the Apple TV is on HDMI 1 and the Apple TV integration is paired with the Companion protocol.
 
-**Third-party remote (e.g. Bravia)**
-`1b. Command` = `Hdmi2` · `1d. Input Type` = `remote.bravia_kd_55xg9505` · `1e. HAP Identifier` = `3`
+**A shortcut that launches an app and switches the TV to it:**
 
-**App from a third-party media player (e.g. Bravia Netflix)**
-`1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.bravia_kd_55xg9505`
+| Field | Value |
+|---|---|
+| Name | `Netflix` |
+| Target entity | `media_player.apple_tv` |
+| What to send | `Netflix` |
+| Switch TV to this input first | `HDMI 1 / Apple TV` |
 
-**App from Apple TV — app only**
-Use this when the TV is already on the Apple TV input, or you handle input switching separately.
-`1. Apple TV App` = On · `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.ng_apple_tv`
+Press ⓘ until it lands on *Netflix* and the TV changes input and opens the app in one step.
 
-**App from Apple TV — with automatic HDMI input switching**
-Use this to switch the TV to the Apple TV HDMI port and launch the app in one step. Set **1e. HAP Identifier** to the number your TV reports for the Apple TV port (read from **1i. Current Identifier** while on that input).
-`1. Apple TV App` = On · `1. Apple TV Input` = On · `1c. App Name` = `Netflix` · `1d. Input Type` = `media_player.ng_apple_tv` · `1e. HAP Identifier` = `8`
+**App only, no input switch** — use this when the TV is already on the Apple TV, or you handle input elsewhere. Same as above, leave *Switch TV to this input first* empty.
 
-> Apple TV app names are case-sensitive. The easiest way to find them: **Developer Tools → Actions → `media_player.select_source`** → pick your Apple TV entity — the source list shows every installed app with the exact string.
+### App names
 
-### Third-party integrations
+App names are **case-sensitive and must match exactly**. They are whatever your Apple TV reports, so the reliable way to get them is:
 
-When using a `remote.*` or `media_player.*` entity as the input type, this integration sends the command but relies entirely on the third-party integration to carry it out. The exact command strings, app names, and entity IDs vary between integrations — and what works on one brand may not work on another.
+**Developer Tools → Actions → `media_player.select_source`** → pick your Apple TV entity → the source dropdown lists every installed app with the exact string.
 
-Before saving an input that uses a third-party entity, check that integration's own documentation for:
-- The correct command or app name format it expects
-- Any pairing or configuration requirements (e.g. Companion protocol for Apple TV, network discovery for Bravia)
-- Known limitations — some integrations do not support certain services like `play_media` or `select_source`
+Commonly seen names, as a starting point:
 
-If a test command does nothing or throws an error, the issue is almost always with the third-party integration rather than this one.
+| | | |
+|---|---|---|
+| `Netflix` | `Disney+` | `Prime Video` |
+| `YouTube` | `Apple TV` | `Music` |
+| `Max` | `Paramount+` | `Hulu` |
+| `Plex` | `Spotify` | `Twitch` |
+| `Photos` | `App Store` | `Settings` |
+
+Region matters. `Prime Video` is `Amazon Prime Video` on some tvOS versions, `Max` was `HBO Max`, and local broadcasters (`ARD Mediathek`, `ZDFmediathek`, `BBC iPlayer`, `ITVX`) appear only where they're installed. Always confirm against the dropdown.
+
+> **Why `select_source` and not `play_media`?** The Apple TV integration only supports launching apps through `select_source`. The integration works this out for you by checking whether your app name appears in the Apple TV's own source list — which it will, because that list *is* the installed apps.
 
 ---
 
-## iOS Remote Widget Buttons
+## Worked example: other integrations
+
+Any entity that exposes `media_player.select_source`, `media_player.play_media` or `remote.send_command` can be a shortcut target.
+
+**Sony Bravia — launch an app**
+
+| Field | Value |
+|---|---|
+| Name | `YouTube` |
+| Target entity | `media_player.bravia_kd_55xg9505` |
+| What to send | `YouTube` |
+
+**Sony Bravia — send a vendor remote command (CEC input, etc.)**
+
+| Field | Value |
+|---|---|
+| Name | `Portal CEC` |
+| Target entity | `remote.bravia_kd_55xg9505` |
+| What to send | `Hdmi2` |
+| Switch TV to this input first | `HDMI 2` |
+
+**Android TV / Google TV box — launch an app by package**
+
+| Field | Value |
+|---|---|
+| Name | `Disney+` |
+| Target entity | `media_player.shield` |
+| What to send | `com.disney.disneyplus` |
+| Switch TV to this input first | `HDMI 3` |
+
+---
+
+## Which TVs have HomeKit, and what to pair them with
+
+Your TV must be pairable through **HomeKit Device** for this integration to exist at all. Beyond that, most of these brands also have their own Home Assistant integration, which is what you'd use as a *shortcut target* for apps and vendor commands the HAP protocol can't reach.
+
+| TV brand | HomeKit built in | Best Home Assistant integration for shortcuts | Good shortcut targets |
+|---|---|---|---|
+| **LG** (webOS) | 2019 and later | [LG webOS TV](https://www.home-assistant.io/integrations/webostv/) | apps by name, vendor remote buttons |
+| **Samsung** | 2019 and later | [Samsung Smart TV](https://www.home-assistant.io/integrations/samsungtv/) | apps, key commands |
+| **Sony** (Android/Google TV) | 2019 and later | [Android TV Remote](https://www.home-assistant.io/integrations/androidtv_remote/) — or [Sony Bravia TV](https://www.home-assistant.io/integrations/braviatv/) on older sets | apps, input commands |
+| **Vizio** (SmartCast) | 2016 and later | [VIZIO SmartCast](https://www.home-assistant.io/integrations/vizio/) | apps, inputs |
+| **Roku TV** (TCL, Hisense, Philips…) | 2019 and later | [Roku](https://www.home-assistant.io/integrations/roku/) | channels/apps, remote keys |
+| **Philips** (non-Roku) | varies by line | [Philips TV](https://www.home-assistant.io/integrations/philips_js/) | apps, ambilight |
+| **Amazon Fire TV Edition** | 2019 4K models | [Android Debug Bridge](https://www.home-assistant.io/integrations/androidtv/) | apps by package |
+
+Set-top boxes are usually the more useful shortcut target anyway:
+
+| Box | Integration | Notes |
+|---|---|---|
+| **Apple TV** | [Apple TV](https://www.home-assistant.io/integrations/apple_tv/) | `select_source` launches apps; needs Companion pairing |
+| **Nvidia Shield / Google TV** | [Android TV Remote](https://www.home-assistant.io/integrations/androidtv_remote/) | apps by package name |
+| **Roku box / stick** | [Roku](https://www.home-assistant.io/integrations/roku/) | apps by name |
+
+> Brand and year coverage moves around, and a set that does AirPlay 2 doesn't always do HomeKit. The honest test is the one that matters: if the TV shows up in **HomeKit Device**, you're in business.
+
+---
+
+## Entities
+
+Six entities, one device page.
+
+| Entity | What it does |
+|---|---|
+| `remote.<name>` | The command layer — `remote.turn_on`, `remote.turn_off`, `remote.send_command` |
+| `media_player.<name>` | What you expose to HomeKit Bridge. Power, volume, mute, play/pause, source select |
+| **Next input** | Steps the cycle forward — same action, same position, as the widget's ⓘ button |
+| **Reload HomeKit Bridge** | Re-registers the accessory so Apple Home picks up a changed input list |
+| **Debug listen** | Logs everything read from the HomeKit Device entity, tagged `[HOMEKIT_TV_LISTEN]` |
+| **Debug send** | Logs every command written to the TV, tagged `[HOMEKIT_TV_SEND]` |
+
+Both debug switches take effect immediately, log at warning level so they need no logger configuration, and survive a restart.
+
+**Useful attributes.** On `remote.<name>`: `current_source` (the raw HomeKit input name), `is_muted`, `tv_inputs` (the full name → identifier map — invaluable when something won't switch), and `last_hap_error` after a failure. On `media_player.<name>`: `tv_source`, the raw HomeKit name of the active input even when it isn't one you configured.
+
+---
+
+## Commands
+
+<p align="center"><img src="docs/img/hap_remote.png" width="560" alt="HAP command reference"></p>
+
+The same drawing is inside the integration, under **Configure → HAP commands**.
+
+`remote.send_command` accepts any of these.
+
+| Command | Does |
+|---|---|
+| `up` `down` `left` `right` | D-pad |
+| `select` / `ok` / `enter` | Select |
+| `back` · `exit` | Back · Exit |
+| `play_pause` / `play` / `pause` | Play/pause |
+| `rewind` `fast_forward` `next_track` `previous_track` | Transport |
+| `info` · `home` · `settings` | Info · TV Home · TV Settings |
+| `volume_up` / `volume_down` | Volume (`vol_up` / `vol_down` also work) |
+| `mute` · `mute_on` · `mute_off` | Toggle · force on · force off |
+| `input:Apple TV` | Switch to a TV input **by name** |
+| `input_9` / `hdmi_9` | Switch to a TV input by HomeKit identifier |
+| `4` `5` `6` `7` `8` `9` `10` `11` `15` | Raw HAP RemoteKey values |
+
+Raw values: 0 rewind · 1 fast forward · 2 next · 3 previous · 4–7 up/down/left/right · 8 select · 9 back · 10 exit · 11 play/pause · 15 info. `14` (settings) and `16` (home) are vendor extensions — they work on Sony; TVs that don't know them ignore them.
+
+`mute` is optimistic: HomeKit doesn't report mute state back, so it toggles what the integration last sent. Use `mute_on` / `mute_off` where the result must be certain.
+
+```yaml
+# Power
+- action: remote.turn_on
+  target: { entity_id: remote.sony_tv }
+
+# Volume
+- action: remote.send_command
+  target: { entity_id: remote.sony_tv }
+  data: { command: "volume_up" }
+
+# Switch input by name
+- action: remote.send_command
+  target: { entity_id: remote.sony_tv }
+  data: { command: "input:Apple TV" }
+
+# Navigate, then select
+- action: remote.send_command
+  target: { entity_id: remote.sony_tv }
+  data:
+    command: ["down", "down", "select"]
+    delay_secs: 0.2
+
+# Long press
+- action: remote.send_command
+  target: { entity_id: remote.sony_tv }
+  data: { command: "settings", hold_secs: 1.5 }
+
+# Or just drive it as a media player
+- action: media_player.select_source
+  target: { entity_id: media_player.sony_tv }
+  data: { source: "Netflix" }
+```
+
+---
+
+## iOS remote widget
 
 | Button | Action |
 |---|---|
 | D-pad | Navigate |
 | Select | OK |
 | Back | Back |
-| Play/Pause | Play/Pause |
-| **ⓘ Info** | Cycle to next enabled input |
+| Play/Pause | Play/pause |
+| **ⓘ Info** | Next input in your list |
+
+The widget and the **Next input** button share one position in the cycle, and the cycle starts from whatever input the TV is actually on — so ⓘ always moves one step from where you are, even if you changed input with the TV's own remote.
 
 ---
 
-## HAP Commands Reference
+## Troubleshooting
 
-| Command | Function |
-|---|---|
-| `4` `5` `6` `7` | D-pad Up / Down / Left / Right |
-| `8` | Select / OK |
-| `9` | Back |
-| `10` | Exit |
-| `11` | Play/Pause |
-| `16` | TV Home |
-| `14` | TV Settings |
-| `volume_up` / `volume_down` | Volume |
-| `input_N` | Switch to input N |
+**Apple Home doesn't show my new inputs.** Press **Reload HomeKit Bridge**, then force-close and reopen the Home app. Apple caches the accessory's input list aggressively.
+
+**No remote widget in Control Center.** The media player must be exposed in `mode: accessory`, not bridge mode, and paired as its own accessory.
+
+**The Configure dialog has no text.** The `translations` folder is missing from the integration folder, or was added while Home Assistant was running — that folder listing is taken once per run, so it needs a full restart, not a reload. If a restart doesn't fix it, hard refresh your browser (Ctrl/Cmd+Shift+R); the frontend caches translations.
+
+**An input switches to the wrong place.** Check `tv_inputs` on the remote entity. If it reads like a clean `1, 2, 3…` run, the accessory description couldn't be read and the integration fell back to guessing by position. Turn on **Debug send** and look for the warning.
+
+**A shortcut does nothing.** Use the **Test** box first — it reports back in the form and logs the reason. If a command is logged but nothing happens, the other integration is refusing it. Check the app name against Developer Tools.
 
 ---
 
-## YAML Examples
+## Upgrading from 1.x
 
-```yaml
-# Power
-- action: remote.turn_on
-  target:
-    entity_id: remote.sony_tv
+Automatic. On first start the config entry migrates and your saved inputs are converted; nothing is deleted.
 
-# Volume
-- action: remote.send_command
-  target:
-    entity_id: remote.sony_tv
-  data:
-    command: "volume_up"
+1. **Everything you had saved is now visible in Apple Home.** 1.x kept "saved" and "included" as separate ideas; there's one list now. Anything whose Include switch was off is migrated anyway and named in the log — remove what you don't want under **Manage saved inputs**.
+2. **The config entities disappear from the device page**, and their registry entries are cleaned up so you get no "Unavailable" ghosts. The remote, the media player, Next input and both debug switches keep their IDs and history.
+3. **Migrated inputs keep their old numeric identifier.** They keep working, and show as `(migrated)` in the manage list. To convert one, remove it and tick the input under **TV inputs**.
 
-# Input switch
-- action: remote.send_command
-  target:
-    entity_id: remote.sony_tv
-  data:
-    command: "input_9"
-
-# Long press
-- action: remote.send_command
-  target:
-    entity_id: remote.sony_tv
-  data:
-    command: "14"
-    hold_secs: 1.5
-```
+Manual installs: delete `text.py`, `select.py` and `sensor.py`.
 
 ---
 
-## Debug
+## Tested with
 
-Two switches in the Diagnostics section let you turn on detailed logging without restarting:
-
-- **Debug Listen** — logs everything received from the TV (`HOMEKIT_TV_LISTEN`)
-- **Debug Send** — logs every command sent to the TV (`HOMEKIT_TV_SEND`)
+Sony KD-55XG9505 · Home Assistant 2026.8 · iOS 26 / iPadOS 26
 
 ---
 
-## Tested With
+## Say thank you
 
-- Sony KD-55XG9505
-- Home Assistant 2026.3
-- iOS 26.3 / iPadOS 26.3
+If this saves you time, a small donation helps keep it going.
 
----
-
-## Say Thank You
-
-If this integration saves you time or just makes your setup a little better, a small donation is always appreciated — it helps keep the project going.
-
-[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&logoColor=white)](https://www.paypal.com/donate?business=nikfam86%40gmail.com&item_name=HomeKit+TV+Remote)
+<a href="https://www.paypal.com/donate?business=nikfam86%40gmail.com&item_name=HomeKit+TV+Remote"><img src="https://img.shields.io/badge/Donate-PayPal-0070ba?logo=paypal&logoColor=white" alt="Donate"></a>

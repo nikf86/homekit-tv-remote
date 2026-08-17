@@ -1,0 +1,53 @@
+name: Bug report
+description: Something does not work as described in the manual.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: turn on **Debug send** (and **Debug listen** if it is a
+        state problem) on the device page, reproduce the issue, then paste the
+        `[HOMEKIT_TV_SEND]` / `[HOMEKIT_TV_LISTEN]` lines below. Without them
+        most reports cannot be acted on.
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      description: Shown at the top of the integration page.
+      placeholder: "2.2.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.8.0"
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV make and model
+      placeholder: "Sony KD-55XG9505"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log lines
+      description: Debug send / Debug listen output, and any errors.
+      render: shell
+  - type: textarea
+    id: inputs
+    attributes:
+      label: The tv_inputs attribute
+      description: >
+        From Developer Tools → States → your remote entity. This is the map of
+        input names to HomeKit identifiers and it explains most switching bugs.
+      render: json
