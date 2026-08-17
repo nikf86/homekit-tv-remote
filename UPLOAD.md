@@ -1,4 +1,4 @@
-# Publishing 2.2.0
+# Publishing 2.3.2
 
 Your repo is currently: `README.md`, `hacs.json`, `custom_components/homekit_tv_remote/`, three committed `.DS_Store` files, and tags up to `v1.5.0`. This release changes enough that the how matters as much as the what.
 
@@ -6,11 +6,9 @@ Your repo is currently: `README.md`, `hacs.json`, `custom_components/homekit_tv_
 
 ## What HACS actually checks
 
-Two corrections to keep in mind, because they affect the file layout.
+One thing to keep in mind, because it affects the file layout.
 
-**HACS reads the icon from inside your integration.** `custom_components/homekit_tv_remote/brand/icon.png` — you already had it, and it is kept. HACS falls back to the [home-assistant/brands](https://github.com/home-assistant/brands) repository only when that folder is absent.
-
-**Home Assistant itself never reads it from there.** The "icon not available" placeholder on the integration page comes from `brands.home-assistant.io`, and the only way to fill it is a pull request to that repository. That is what `brands/` at the repo root is for. You want both: `brand/` for HACS, the PR for Home Assistant.
+**The icon lives inside your integration and nowhere else.** `custom_components/homekit_tv_remote/brand/icon.png` — you already had it, and it is kept. Both HACS and Home Assistant read it from there. See "The icon" below.
 
 **`manifest.json` must define `domain`, `documentation`, `issue_tracker`, `codeowners`, `name`, `version`.** Yours had `documentation` empty and no `issue_tracker` — both now filled in. The HACS validation workflow added in `.github/workflows/` fails on this, so you will see it caught automatically from now on.
 
@@ -54,11 +52,11 @@ git add -A
 git status
 ```
 
-`git status` should show the three deleted platform files, the moved `versions.json`, the new `.github/`, `brands/`, `docs/`, `CHANGELOG.md`, `LICENSE`, `.gitignore`, and modifications to everything under `custom_components/`. If it shows deletions you did not expect, stop and look.
+`git status` should show the three deleted platform files, the moved `versions.json`, the new `.github/`, `docs/`, `CHANGELOG.md`, `LICENSE`, `.gitignore`, and modifications to everything under `custom_components/`. If it shows deletions you did not expect, stop and look.
 
 ```bash
 # 5. commit and push
-git commit -m "2.2.0 — configuration moves into the options flow
+git commit -m "2.3.2 — configuration moves into the options flow
 
 Configuration is a form instead of 15 device-page entities. Input
 identifiers are read from the accessory instead of guessed. Fixes the
@@ -83,12 +81,12 @@ With the `gh` CLI:
 
 ```bash
 git checkout main && git pull
-gh release create v2.2.0 --title "2.2.0 — a rewrite" --notes-file RELEASE_NOTES.md
+gh release create v2.3.2 --title "2.3.2 — a rewrite" --notes-file RELEASE_NOTES.md
 ```
 
-Or on the website: **Releases → Draft a new release → tag `v2.2.0` → target `main`** → paste `RELEASE_NOTES.md` into the description → **Publish release**.
+Or on the website: **Releases → Draft a new release → tag `v2.3.2` → target `main`** → paste `RELEASE_NOTES.md` into the description → **Publish release**.
 
-Tag it `v2.2.0` to match your existing `v1.x` tags.
+Tag it `v2.3.2` to match your existing `v1.x` tags.
 
 ---
 
@@ -98,17 +96,24 @@ Tag it `v2.2.0` to match your existing `v1.x` tags.
 
 ---
 
-## The brands pull request
+## The icon — nothing to do
 
-Separate from all of the above, and it is what fills in the "icon not available" placeholder on the integration page.
+Since **Home Assistant 2026.3** a custom integration serves its own icon. Ship
+`custom_components/<domain>/brand/icon.png` and Home Assistant picks it up through
+its Brands Proxy API at `/api/brands/integration/<domain>/icon.png`, caching it on
+disk. Local images take priority over the CDN, and no configuration is needed.
 
-1. Fork <https://github.com/home-assistant/brands>.
-2. Copy `brands/custom_integrations/homekit_tv_remote/` from this repo into the fork, at the same path.
-3. Open a pull request.
+That folder shipped in this release, with `icon.png` (256x256) and
+`icon@2x.png` (512x512).
 
-Two rules that get custom integrations rejected: no Home Assistant branding in the artwork, and no symlinks in `custom_integrations`.
+The `custom_integrations` folder in the home-assistant/brands repository is now
+marked **legacy** in that repo's own README. A pull request there is neither
+required nor wanted for a custom integration on a current Home Assistant, which
+is why one gets closed unmerged.
 
----
+If the placeholder persists after installing: restart Home Assistant, then hard
+refresh the browser (Cmd+Shift+R). The proxy caches on disk with a
+stale-while-revalidate strategy, so a previously failed fetch can stick around.
 
 ## One decision left
 

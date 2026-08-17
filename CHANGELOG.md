@@ -1,6 +1,11 @@
 # Changelog
 
-## 2.2.0
+## 2.3.0
+
+- Removed the **HAP commands** step. Home Assistant's markdown sanitiser strips almost all of an inline SVG — no `viewBox`, no `fill`, and `circle`/`rect`/`text` are not allowed tags — so the drawing arrived as a couple of stray fragments. It lives in the manual instead, where it renders properly.
+- Every title, label and description in the Configure dialog rewritten: shorter and more direct.
+
+## 2.2.0 — superseded
 
 - **HAP commands** entry in Configure: the full command reference, drawn as a remote.
 - The same drawing heads the command section of the manual.

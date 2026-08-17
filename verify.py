@@ -478,17 +478,34 @@ async def main() -> None:
     await asyncio.gather(*entry.background)
     hass.services.delay = 0.0
 
-    # A slow target must not stall the next press either.
+    # After a pause, the cycle continues from whatever was last selected — even
+    # a shortcut the TV cannot report, like an app launch that leaves the TV on
+    # the same input. Three cycles above landed on index 3.
     entry.background.clear()
     hass.services.blocking_flags.clear()
     media._last_cycle = 0.0
     await media.async_cycle_input()
-    idx_after_quiet = media._cycle_index
-    check(
-        "after a quiet period the cycle resyncs to the live input",
-        idx_after_quiet,
-        1,  # live source is "TV" at index 0 → next is index 1
-    )
+    check("after a pause it continues from the last thing selected",
+          media._cycle_index, 4)
+
+    # But when the TV genuinely moves elsewhere — someone picked up its own
+    # remote — the anchor is dropped and the cycle follows the TV again.
+    entry.background.clear()
+    media._last_cycle = 0.0
+    hass.states.set("media_player.hk_tv", "on", source="Apple TV")
+    media._apply_hk_state(hass.states.get("media_player.hk_tv"))
+    check("a real TV move clears the remembered selection", media._active_id, None)
+    check("source follows the TV again", media.source, "Apple TV")
+    await media.async_cycle_input()
+    check("and the cycle resyncs to it", media._cycle_index, 2)
+
+    # A power change on its own must not clear it — the TV has not moved.
+    entry.background.clear()
+    await media.async_select_source("Bravia YouTube")
+    await asyncio.gather(*entry.background)
+    hass.states.set("media_player.hk_tv", "playing", source="Apple TV")
+    media._apply_hk_state(hass.states.get("media_player.hk_tv"))
+    check("a state change with no input change keeps it", media.source, "Bravia YouTube")
 
     # Test from the options flow still blocks, so failures surface.
     hass.services.blocking_flags.clear()
@@ -514,31 +531,94 @@ async def main() -> None:
 asyncio.run(main())
 
 
-# ─── 9. The drawn HAP remote and the flow steps ────────────────────────────────
+# ─── 9. Configure changes must reach the frontend immediately ──────────────────
+#
+# Regression guard for the bug where a saved shortcut stayed invisible until the
+# TV next changed state — sometimes half an hour. The data was right; nothing
+# published it. Writing options and publishing the new state are two steps.
 
-print("\n9. HAP command artwork")
+print("\n9. Saving an input publishes the new source list")
 
-import json as _json
-import re as _re
 
-from custom_components.homekit_tv_remote.remote_art import REMOTE_SVG
+async def _config_flow_checks() -> None:
+    from custom_components.homekit_tv_remote.config_flow import HomeKitTVOptionsFlow
 
-_head = REMOTE_SVG.split(">")[0]
-check("is an svg element", REMOTE_SVG.startswith("<svg") and REMOTE_SVG.endswith("</svg>"), True)
-check("has a viewBox so it scales to the dialog", "viewBox" in _head, True)
-check("no fixed width/height", "width=" not in _head and "height=" not in _head, True)
-check(
-    "survives the JSON round-trip to the frontend",
-    _json.loads(_json.dumps({"remote": REMOTE_SVG}))["remote"] == REMOTE_SVG,
-    True,
-)
-check(
-    "no emoji — they render as OS artwork and differ per machine",
-    bool(_re.search(r"[\U0001F000-\U0001FAFF\u23e9-\u23fa]", REMOTE_SVG)),
-    False,
-)
-check("vendor-extension keys are marked", REMOTE_SVG.count("stroke-dasharray") >= 2, True)
-check("has an accessible label", 'role="img"' in _head and "aria-label" in _head, True)
+    hass = FakeHass()
+    entry = make_entry({"inputs": [{"id": "a", "name": "TV", "source": "TV"}]})
+
+    class Entries:
+        @staticmethod
+        def async_update_entry(target, options=None, **_):
+            target.options = options
+
+    hass.config_entries = Entries()
+
+    media = HomeKitTVMediaPlayer(hass, entry, "media_player.hk_tv")
+    entry.runtime_data.media_ref = media
+    writes = []
+    media.async_write_ha_state = lambda: writes.append(1)
+
+    class Flow(HomeKitTVOptionsFlow):
+        def __init__(self, cfg_entry, hass_):
+            self._e, self.hass = cfg_entry, hass_
+
+        @property
+        def config_entry(self):
+            return self._e
+
+        def async_show_form(self, **kwargs):
+            return {"type": "form", **kwargs}
+
+        def async_show_menu(self, **kwargs):
+            return {"type": "menu", **kwargs}
+
+        def async_abort(self, *, reason):
+            return {"type": "abort", "reason": reason}
+
+        def add_suggested_values_to_schema(self, schema, _values):
+            return schema
+
+    flow = Flow(entry, hass)
+
+    await flow.async_step_shortcut(
+        {"name": "Netflix", "target": "media_player.atv", "action": "Netflix"}
+    )
+    check("the shortcut is stored", [i["name"] for i in flow._inputs], ["TV", "Netflix"])
+    check("source_list includes it straight away", media.source_list, ["TV", "Netflix"])
+    check("and the new state was published", len(writes), 1)
+
+    writes.clear()
+    await flow.async_step_rename({"target_input": "a", "new_name": "Television"})
+    check("renaming publishes too", len(writes), 1)
+    check("under the new name", media.source_list[0], "Television")
+
+    writes.clear()
+    await flow.async_step_remove({"remove": ["a"]})
+    check("removing publishes too", len(writes), 1)
+    check("and it is gone from the source list", media.source_list, ["Netflix"])
+
+    menu = await flow.async_step_init()
+    check("Manual entry removed from the menu", menu["menu_options"],
+          ["tv_inputs", "shortcut", "manage"])
+
+    # Two entries with one name give a source_list with duplicates, and
+    # select_source then picks whichever comes first. The shortcut form already
+    # refuses a duplicate; ticking a TV input must refuse it from the other side.
+    entry.options = {"inputs": [
+        {"id": "s", "name": "Apple TV", "target": "media_player.atv", "action": "Netflix"},
+    ]}
+    entry.runtime_data.tv_inputs = {"TV": 1, "Apple TV": 8}
+    result = await flow.async_step_tv_inputs({"sources": ["Apple TV"]})
+    check("a TV input clashing with a shortcut is refused",
+          result.get("errors"), {"base": "name_clash"})
+    check("and nothing was saved", [i["name"] for i in flow._inputs], ["Apple TV"])
+    result = await flow.async_step_tv_inputs({"sources": ["TV"]})
+    check("a non-clashing tick still saves", result["type"], "menu")
+    check("names stay unique", sorted(i["name"] for i in flow._inputs),
+          ["Apple TV", "TV"])
+
+
+asyncio.run(_config_flow_checks())
 
 print()
 if FAILURES:

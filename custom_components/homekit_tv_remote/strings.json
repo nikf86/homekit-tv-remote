@@ -3,19 +3,19 @@
     "step": {
       "user": {
         "title": "HomeKit TV Remote",
-        "description": "Pick the TV you already paired through the HomeKit Device integration. The name you give it becomes the entity names, for example Sony TV produces remote.sony_tv and media_player.sony_tv.",
+        "description": "Select the TV you paired through the HomeKit Device integration.",
         "data": {
-          "media_player_entity_id": "Your paired TV",
+          "media_player_entity_id": "Paired TV",
           "tv_name": "Name"
         },
         "data_description": {
-          "media_player_entity_id": "Only TVs paired through the HomeKit Device integration are listed.",
-          "tv_name": "Used for the device name and both entity IDs."
+          "media_player_entity_id": "Only TVs paired through HomeKit Device are listed.",
+          "tv_name": "Sets both entity IDs. Sony TV gives remote.sony_tv and media_player.sony_tv."
         }
       }
     },
     "abort": {
-      "no_homekit_tv": "No paired TV found. Pair the TV through the HomeKit Device integration first, then add this one.",
+      "no_homekit_tv": "No paired TV found. Pair it through HomeKit Device first.",
       "already_configured": "This TV is already set up."
     }
   },
@@ -23,126 +23,111 @@
     "step": {
       "init": {
         "title": "HomeKit TV Remote",
-        "description": "Changes take effect immediately. Press **Reload HomeKit Bridge** on the device page once you are finished, so Apple Home picks up the new list.",
+        "description": "Changes apply immediately. Press Reload HomeKit Bridge on the device page when you are done.",
         "menu_options": {
           "tv_inputs": "TV inputs",
           "shortcut": "Add a shortcut",
-          "manage": "Manage saved inputs",
-          "manual": "Manual",
-          "hap_commands": "HAP commands"
+          "manage": "Manage saved inputs"
         },
         "menu_option_descriptions": {
-          "tv_inputs": "Tick the inputs your TV reports, and test one before committing.",
-          "shortcut": "Add an app or another integration's command as an input.",
-          "manage": "Rename, reorder or remove what you have configured.",
-          "manual": "Open the full documentation.",
-          "hap_commands": "Every command remote.send_command accepts, on a drawn remote."
+          "tv_inputs": "Choose which of the TV's inputs to expose.",
+          "shortcut": "Add an app or another integration's command.",
+          "manage": "Rename, reorder, remove."
         }
       },
       "tv_inputs": {
         "title": "TV inputs",
-        "description": "These are the inputs your TV reports over HomeKit. Ticked ones appear in Apple Home, in the Home Assistant source list, and in the ⓘ Info button cycle.\n\nNot sure which is which? Pick one under **Test** and submit — the TV switches to it and this form stays open. Nothing is saved while testing.",
+        "description": "Ticked inputs appear in Apple Home, in the source list, and in the ⓘ cycle.",
         "data": {
           "sources": "Inputs to show",
-          "test_input": "Test — switch the TV to this now"
+          "test_input": "Test"
         },
         "data_description": {
-          "sources": "Nothing to type: the names and their HomeKit identifiers are read from the TV itself.",
-          "test_input": "Leave empty to save your selection instead."
+          "sources": "Read from the TV. Nothing to type.",
+          "test_input": "Switches the TV to it now, without saving. Leave empty to save your selection."
         }
       },
       "shortcut": {
         "title": "Add a shortcut",
-        "description": "A shortcut is an input that drives another integration — launching Netflix on an Apple TV, or sending a CEC command through a vendor remote.\n\nTick **Test** to fire it once without saving.",
+        "description": "An input that drives another integration: an Apple TV app, a vendor remote command.",
         "data": {
           "name": "Name",
           "target": "Target entity",
           "action": "What to send",
-          "tv_source": "Switch TV to this input first",
-          "test": "Test without saving"
+          "tv_source": "Switch TV input first",
+          "test": "Test"
         },
         "data_description": {
-          "name": "Shown in Apple Home and in the Home Assistant source list.",
-          "target": "The media player or remote entity that carries out the action.",
-          "action": "An app name for a media player, or a command name for a remote. The right service is chosen automatically: if the app name appears in that entity's own source list it is selected as a source, otherwise it is played as media.",
-          "tv_source": "Optional. Use it when the TV also has to change input first, for example to the Apple TV's HDMI port.",
-          "test": "Sends it now and leaves the form open. Untick and submit to save."
+          "name": "Shown in Apple Home and in the source list.",
+          "target": "The media player or remote that carries it out.",
+          "action": "App name for a media player, command name for a remote. select_source or play_media is chosen automatically.",
+          "tv_source": "Optional. Changes the TV's input before running the action.",
+          "test": "Sends it now without saving. Untick to save."
         }
-      },
-      "hap_commands": {
-        "title": "HAP commands",
-        "description": "Everything `remote.send_command` accepts on this TV. Names and raw values are interchangeable.\n\n{remote}\n\nThis is a reference, not a control — a settings dialog cannot have pressable buttons. For a remote you can actually use, build a dashboard card that calls `remote.send_command`."
       },
       "manage": {
         "title": "Manage saved inputs",
-        "description": "Everything you have configured, in cycle order.",
+        "description": "Listed in cycle order.",
         "menu_options": {
-          "rename": "Rename an input",
-          "reorder": "Change the order",
-          "remove": "Remove inputs"
+          "rename": "Rename",
+          "reorder": "Reorder",
+          "remove": "Remove"
         },
         "menu_option_descriptions": {
-          "rename": "Change the label only — what the input does stays the same.",
-          "reorder": "Move one input up or down in the ⓘ cycle.",
-          "remove": "Delete inputs you no longer want."
+          "rename": "Change the label. Behaviour and position stay.",
+          "reorder": "Move one input through the cycle.",
+          "remove": "Delete inputs."
         }
       },
       "rename": {
-        "title": "Rename an input",
-        "description": "Pick an input and give it a new name. Only the label changes — the TV input it switches to, or the entity it drives, stays exactly as it was, and so does its place in the cycle.\n\nThe form comes back after each rename, so you can do several.",
+        "title": "Rename",
+        "description": "Changes the label only. The form reopens so you can rename several.",
         "data": {
           "target_input": "Input",
           "new_name": "New name"
         },
         "data_description": {
-          "target_input": "Numbered in cycle order.",
-          "new_name": "This is what appears in Apple Home and in the source list."
+          "target_input": "Numbered in cycle order."
         }
       },
       "reorder": {
-        "title": "Change the order",
-        "description": "This is the order the ⓘ Info button and the Next input button step through. Move one input at a time — the list is renumbered each time, so you can keep going until it reads the way you want.",
+        "title": "Reorder",
+        "description": "The order the ⓘ button and Next input step through. The list renumbers after each move.",
         "data": {
-          "target_input": "Input to move",
-          "direction": "Move it"
-        },
-        "data_description": {
-          "target_input": "Numbered in the current cycle order."
+          "target_input": "Input",
+          "direction": "Move"
         }
       },
       "remove": {
-        "title": "Remove inputs",
-        "description": "Tick anything you want to delete. Nothing is ticked to begin with, so submitting as-is changes nothing.",
+        "title": "Remove",
+        "description": "Nothing is ticked by default.",
         "data": {
-          "remove": "Remove these"
+          "remove": "Delete these"
         }
-      },
-      "manual": {
-        "title": "Manual",
-        "description": "The full manual covers every field, every command, worked examples for Apple TV and other integrations, and troubleshooting.\n\n**[Open the HomeKit TV Remote manual]({url})**\n\nThe same link is behind the ? icon in any of these dialogs, and under Documentation in the integration's ⋮ menu."
       }
     },
     "error": {
-      "name_required": "Give the input a name.",
-      "name_taken": "You already have an input with that name.",
-      "action_required": "Enter the app name or command to send.",
-      "test_sent": "Sent. If the TV did what you expected, clear Test and submit to save.",
-      "test_failed": "That could not be sent. Check the Home Assistant log for the reason.",
-      "renamed": "Renamed. Pick another input to rename, or close this dialog.",
-      "reordered": "Moved. The list below is renumbered — move another, or close this dialog."
+      "name_required": "Enter a name.",
+      "name_taken": "That name is already in use.",
+      "action_required": "Enter what to send.",
+      "test_sent": "Sent. Untick Test and submit to save.",
+      "test_failed": "Failed. See the log for the reason.",
+      "renamed": "Renamed.",
+      "reordered": "Moved.",
+      "name_clash": "One of those inputs has the same name as a saved shortcut. Rename the shortcut first."
     },
     "abort": {
-      "no_sources": "Your TV is not reporting any inputs. Make sure it is switched on and reachable, then try again.",
-      "no_inputs": "Nothing is configured yet. Add TV inputs or a shortcut first.",
-      "nothing_to_reorder": "You need at least two saved inputs before order means anything."
+      "no_sources": "The TV reports no inputs. Switch it on and try again.",
+      "no_inputs": "Nothing configured yet.",
+      "nothing_to_reorder": "Needs at least two inputs."
     }
   },
   "selector": {
     "direction": {
       "options": {
         "top": "To the top",
-        "up": "Up one",
-        "down": "Down one",
+        "up": "Up",
+        "down": "Down",
         "bottom": "To the bottom"
       }
     }

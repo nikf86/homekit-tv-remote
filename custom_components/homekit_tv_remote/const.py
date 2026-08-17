@@ -12,9 +12,10 @@ from typing import Final
 
 DOMAIN: Final = "homekit_tv_remote"
 
-# Same URL as manifest.json "documentation", which is what puts the ? icon in
-# every dialog header and the Documentation item in the integration menu.
-DOCS_URL: Final = "https://github.com/nikf86/homekit-tv-remote#readme"
+# The documentation URL lives only in manifest.json. That single field is what
+# puts the ? icon in every dialog header and the Documentation item in the
+# integration's menu, so a separate Manual step would only have duplicated a
+# link the dialog already carries.
 
 # ─── Config entry: data (static, written once by the config flow) ─────────────
 CONF_HK_ENTITY: Final = "media_player_entity_id"   # HomeKit Device media_player

@@ -38,6 +38,6 @@ Version 1 kept "saved" and "included" as separate ideas; there is one list now. 
 
 ### Also new
 
-Friendly command names (`up`, `back`, `home`, `play_pause`, `rewind`…) alongside the raw integers · `input:<name>` to switch input by name · exit / rewind / fast-forward / track buttons on the iOS widget now work · Test buttons on both the TV inputs and shortcut screens · rename and reorder your inputs · a drawn command reference under **Configure → HAP commands**.
+Friendly command names (`up`, `back`, `home`, `play_pause`, `rewind`…) alongside the raw integers · `input:<name>` to switch input by name · exit / rewind / fast-forward / track buttons on the iOS widget now work · Test buttons on both the TV inputs and shortcut screens · rename and reorder your inputs · a full command reference in the manual.
 
 Full detail and migration notes: [CHANGELOG.md](https://github.com/nikf86/homekit-tv-remote/blob/main/CHANGELOG.md)

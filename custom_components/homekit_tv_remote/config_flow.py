@@ -1,5 +1,5 @@
 """Config flow and options flow for HomeKit TV Remote."""
-# Version: 2.2.0
+# Version: 2.3.2
 #
 # WHAT THIS FILE IS RESPONSIBLE FOR
 #   All user input. Every field that used to be an entity on the device page
@@ -36,7 +36,6 @@
 #   Add a shortcut   name, target entity, what to send, optional TV input first,
 #                    and a Test box that fires it without saving.
 #   Manage           rename, reorder, remove.
-#   Manual           link to the documentation.
 
 from __future__ import annotations
 
@@ -58,7 +57,6 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_HK_ENTITY,
     CONF_TV_NAME,
-    DOCS_URL,
     DOMAIN,
     IN_ACTION,
     IN_ID,
@@ -68,7 +66,6 @@ from .const import (
     IN_TARGET,
     OPT_INPUTS,
 )
-from .remote_art import REMOTE_SVG
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -204,16 +201,32 @@ class HomeKitTVOptionsFlow(OptionsFlowWithReload):
 
     @callback
     def _apply(self, inputs: list[dict[str, Any]]) -> None:
-        """Persist the input list without ending the flow.
+        """Persist the input list and publish the new source list.
 
-        No reload is triggered and none is needed: media_player.py reads
-        options["inputs"] live. Apple Home is the exception — press Reload
-        HomeKit Bridge once when finished.
+        The write and the publish are two separate things, and forgetting the
+        second one is what made added shortcuts invisible for up to half an hour
+        in 2.1.0 and 2.2.x.
+
+        media_player.source_list is a property reading options live, so the data
+        is right the instant async_update_entry returns. But a property changing
+        does not push anything to the frontend — Home Assistant only sends a new
+        state when async_write_ha_state() is called. Nothing here called it, and
+        the media player otherwise only writes state when the *TV* changes, so a
+        new input appeared whenever the TV next happened to turn on or switch
+        input. Before 2.1.0 the flow ended, the entry reloaded and the entities
+        were rebuilt, which hid the omission.
+
+        Apple Home is still a separate matter: HomeKit Bridge caches the
+        accessory's input list, so press Reload HomeKit Bridge once when done.
         """
         entry = self.config_entry
         self.hass.config_entries.async_update_entry(
             entry, options={**entry.options, OPT_INPUTS: inputs}
         )
+
+        media = self._media
+        if media is not None and getattr(media, "hass", None) is not None:
+            media.async_write_ha_state()
 
     # ─── Menu ──────────────────────────────────────────────────────────────────
 
@@ -222,7 +235,7 @@ class HomeKitTVOptionsFlow(OptionsFlowWithReload):
     ) -> ConfigFlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["tv_inputs", "shortcut", "hap_commands", "manage", "manual"],
+            menu_options=["tv_inputs", "shortcut", "manage"],
         )
 
     # ─── TV inputs ─────────────────────────────────────────────────────────────
@@ -256,18 +269,38 @@ class HomeKitTVOptionsFlow(OptionsFlowWithReload):
                     for item in existing
                     if self._is_tv_input(item)
                 }
-                # Rebuild in the TV's own order, reusing existing entries so an
-                # input that was already ticked keeps its id and its name.
-                tv_inputs = [
-                    by_source.get(
-                        source,
-                        {IN_ID: uuid4().hex[:8], IN_NAME: source, IN_SOURCE: source},
-                    )
-                    for source in sources
-                    if source in chosen
+                # A TV input is named after the source, so ticking one can
+                # collide with a shortcut the user already named the same thing.
+                # Two entries sharing a name give a source_list with duplicates,
+                # and select_source then picks whichever comes first — the wrong
+                # one, half the time. The shortcut form already refuses a
+                # duplicate name; this is the same rule from the other side.
+                taken = {item[IN_NAME] for item in others}
+                clashes = [
+                    source
+                    for source in chosen
+                    if source not in by_source and source in taken
                 ]
-                self._apply(tv_inputs + others)
-                return await self.async_step_init()
+                if clashes:
+                    _LOGGER.error(
+                        "Cannot add TV input(s) %s: a saved shortcut already uses "
+                        "that name. Rename the shortcut first",
+                        ", ".join(clashes),
+                    )
+                    errors["base"] = "name_clash"
+                else:
+                    # Rebuild in the TV's own order, reusing existing entries so
+                    # an input that was already ticked keeps its id and name.
+                    tv_inputs = [
+                        by_source.get(
+                            source,
+                            {IN_ID: uuid4().hex[:8], IN_NAME: source, IN_SOURCE: source},
+                        )
+                        for source in sources
+                        if source in chosen
+                    ]
+                    self._apply(tv_inputs + others)
+                    return await self.async_step_init()
 
         current = [item[IN_SOURCE] for item in existing if self._is_tv_input(item)]
         schema = vol.Schema(
@@ -543,43 +576,3 @@ class HomeKitTVOptionsFlow(OptionsFlowWithReload):
             }
         )
         return self.async_show_form(step_id="remove", data_schema=schema)
-
-    # ─── HAP command reference ─────────────────────────────────────────────────
-
-    async def async_step_hap_commands(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Show the drawn remote listing every command remote.send_command takes.
-
-        The artwork goes in as a description placeholder rather than being baked
-        into strings.json, so it lives in one place and translators never see
-        13 KB of path data. It is always supplied, so the description can never
-        render as an empty string the way an unfilled placeholder would.
-        """
-        if user_input is not None:
-            return await self.async_step_init()
-        return self.async_show_form(
-            step_id="hap_commands",
-            data_schema=vol.Schema({}),
-            description_placeholders={"remote": REMOTE_SVG},
-        )
-
-    # ─── Manual ────────────────────────────────────────────────────────────────
-
-    async def async_step_manual(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Show the documentation link.
-
-        A config flow cannot open a browser tab, so this is a step whose
-        description is a markdown link — one click from inside the dialog. The
-        same URL is behind the ? icon in the dialog header and the Documentation
-        item in the integration's ⋮ menu, both wired up by manifest.json.
-        """
-        if user_input is not None:
-            return await self.async_step_init()
-        return self.async_show_form(
-            step_id="manual",
-            data_schema=vol.Schema({}),
-            description_placeholders={"url": DOCS_URL},
-        )

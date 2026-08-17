@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brands/custom_integrations/homekit_tv_remote/icon.png" width="132" alt="HomeKit TV Remote">
+  <img src="custom_components/homekit_tv_remote/brand/icon.png" width="132" alt="HomeKit TV Remote">
 </p>
 
 <h1 align="center">HomeKit TV Remote</h1>
@@ -235,8 +235,6 @@ Both debug switches take effect immediately, log at warning level so they need n
 
 <p align="center"><img src="docs/img/hap_remote.png" width="560" alt="HAP command reference"></p>
 
-The same drawing is inside the integration, under **Configure → HAP commands**.
-
 `remote.send_command` accepts any of these.
 
 | Command | Does |
@@ -256,6 +254,8 @@ The same drawing is inside the integration, under **Configure → HAP commands**
 Raw values: 0 rewind · 1 fast forward · 2 next · 3 previous · 4–7 up/down/left/right · 8 select · 9 back · 10 exit · 11 play/pause · 15 info. `14` (settings) and `16` (home) are vendor extensions — they work on Sony; TVs that don't know them ignore them.
 
 `mute` is optimistic: HomeKit doesn't report mute state back, so it toggles what the integration last sent. Use `mute_on` / `mute_off` where the result must be certain.
+
+`hold_secs` is **not** a long press. HAP's RemoteKey is a single event with no press-and-release pair, so there is nothing to hold — the key is sent once and `hold_secs` simply waits afterwards, which is useful for letting a menu appear before the next command.
 
 ```yaml
 # Power
@@ -279,7 +279,7 @@ Raw values: 0 rewind · 1 fast forward · 2 next · 3 previous · 4–7 up/down/
     command: ["down", "down", "select"]
     delay_secs: 0.2
 
-# Long press
+# Pause after a key, e.g. to let a menu open before the next press
 - action: remote.send_command
   target: { entity_id: remote.sony_tv }
   data: { command: "settings", hold_secs: 1.5 }

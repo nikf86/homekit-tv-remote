@@ -1,5 +1,5 @@
 """Media player — the entity you expose to HomeKit Bridge."""
-# Version: 2.1.0
+# Version: 2.3.2
 #
 # WHAT THIS FILE IS RESPONSIBLE FOR
 #   Being the TV that Apple Home sees. Expose this entity to HomeKit Bridge in
@@ -52,6 +52,7 @@ from .const import (
     DOMAIN,
     EVENT_HOMEKIT_KEY,
     IN_ACTION,
+    IN_ID,
     IN_NAME,
     IN_SOURCE,
     IN_SOURCE_ID,
@@ -138,12 +139,12 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
         self._tv_source: str | None = None    # raw HomeKit input name
         self._cycle_index = 0
         self._last_cycle = 0.0                # loop clock of the last cycle step
+        self._active_id: str | None = None    # id of the input we last ran
 
         # HAP does volume in steps, not levels. A non-None dummy level is what
         # keeps the volume controls visible in the HA media card; without it the
         # card hides them entirely.
         self._attr_volume_level = 0.5
-        self._attr_is_volume_muted = False
 
     # ─── Inputs ────────────────────────────────────────────────────────────────
 
@@ -156,19 +157,54 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
     def source_list(self) -> list[str]:
         return [item[IN_NAME] for item in self._inputs if item.get(IN_NAME)]
 
+    def _targets_source(self, item: dict[str, Any]) -> str | None:
+        """Which of the TV's own inputs this entry switches to, if any.
+
+        By name, or by the numeric identifier that inputs migrated from 1.x
+        still carry — those target a TV input just as much, and forgetting that
+        was what let a stale selection linger after the TV moved.
+        """
+        if source := item.get(IN_SOURCE):
+            return source
+        raw = item.get(IN_SOURCE_ID)
+        if raw in (None, ""):
+            return None
+        for name, identifier in self._entry.runtime_data.tv_inputs.items():
+            if identifier == raw:
+                return name
+        return None
+
     @property
     def source(self) -> str | None:
-        """Our name for whatever input the TV is actually on.
+        """The input we are on, named the way the user named it.
 
-        Returns None rather than the raw HomeKit name when the active input is
-        not one the user configured — a source that is not in source_list
-        confuses both the HA media card and Apple Home. The raw name is always
-        available as the tv_source attribute.
+        The TV only reports which of *its own* inputs is live. It knows nothing
+        about a shortcut: launching Netflix on an Apple TV leaves the TV sitting
+        on "HDMI 1" whichever shortcut got it there. Matching on the TV's report
+        alone showed the wrong name after selecting a shortcut, and nothing at
+        all for a shortcut with no TV input — you would pick "Bravia YouTube"
+        and watch the media card clear itself.
+
+        So the entry we last ran wins, until the TV moves somewhere that
+        contradicts it; _apply_hk_state clears it at that moment.
+
+        Returns None rather than a raw HomeKit name that is not in source_list —
+        a source outside the list confuses the media card and Apple Home alike.
+        The raw name is always readable as the tv_source attribute.
         """
+        inputs = self._inputs
+
+        if self._active_id is not None:
+            for item in inputs:
+                if item.get(IN_ID) == self._active_id:
+                    return item[IN_NAME]
+
         if self._tv_source is None:
             return None
         identifier = self._entry.runtime_data.tv_inputs.get(self._tv_source)
-        for item in self._inputs:
+        for item in inputs:
+            if item.get(IN_TARGET):
+                continue           # a shortcut is never implied by the TV alone
             if item.get(IN_SOURCE) == self._tv_source:
                 return item[IN_NAME]
             if identifier is not None and item.get(IN_SOURCE_ID) == identifier:
@@ -178,6 +214,16 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
     @property
     def state(self) -> MediaPlayerState:
         return self._state
+
+    @property
+    def is_volume_muted(self) -> bool:
+        """Read through to the remote, which is the only thing that mutes.
+
+        Held here as a mirror instead, this drifted: remote.send_command "mute"
+        toggled the remote's flag and the media card never noticed.
+        """
+        remote = self._remote
+        return bool(getattr(remote, "_muted", False)) if remote else False
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -233,12 +279,36 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             new_state = MediaPlayerState.OFF
 
         source = hk_state.attributes.get("source")
+        source_changed = source != self._tv_source
 
-        if new_state != self._state or source != self._tv_source:
+        if new_state != self._state or source_changed:
             self._state = new_state
             self._tv_source = source
+            if source_changed:
+                # Only a move counts. Power changing on its own says nothing
+                # about which entry is on screen.
+                self._forget_active_if_contradicted()
             if write:
                 self.async_write_ha_state()
+
+    @callback
+    def _forget_active_if_contradicted(self) -> None:
+        """Drop the remembered selection when the TV moves off it.
+
+        Called only when the TV's reported input actually changed. The entry
+        survives just one case: the TV landed exactly where that entry asked it
+        to. Anything else — including a move away from where a no-TV-input
+        shortcut was running — means something other than us is driving now,
+        and continuing to claim our entry is on screen would be a lie.
+        """
+        if self._active_id is None:
+            return
+        for item in self._inputs:
+            if item.get(IN_ID) == self._active_id:
+                if self._targets_source(item) == self._tv_source:
+                    return
+                break
+        self._active_id = None
 
     # ─── Access to the remote entity ───────────────────────────────────────────
 
@@ -248,8 +318,14 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
         return self._entry.runtime_data.remote_ref
 
     async def _press(self, key: int) -> None:
-        if (remote := self._remote) is not None:
-            await remote._press(key)
+        if (remote := self._remote) is None:
+            _LOGGER.warning(
+                "Cannot send key %s: the remote entity did not set up. Check the "
+                "log from startup for a HomeKit connection error",
+                key,
+            )
+            return
+        await remote._press(key)
 
     # ─── Power, volume, playback ───────────────────────────────────────────────
 
@@ -273,7 +349,6 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
         """Apple Home sends an explicit on/off here, so pass it straight down."""
         if (remote := self._remote) is not None:
             await remote.async_set_mute(mute)
-            self._attr_is_volume_muted = mute
             self.async_write_ha_state()
 
     async def async_media_play(self) -> None:
@@ -322,6 +397,10 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
         Apple TV switches.
         """
         name = item.get(IN_NAME, "?")
+        # Remember what we ran so `source` can report it. The TV cannot tell us
+        # which shortcut was used — it only knows its own inputs.
+        if item.get(IN_ID):
+            self._active_id = item[IN_ID]
         target: str = item.get(IN_TARGET) or ""
         action: str = item.get(IN_ACTION) or ""
 
