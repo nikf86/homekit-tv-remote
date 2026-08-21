@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="custom_components/homekit_tv_remote/brand/icon.png" width="132" alt="HomeKit TV Remote">
+  <img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/custom_components/homekit_tv_remote/brand/icon.png" width="132" alt="HomeKit TV Remote">
 </p>
 
 <h1 align="center">HomeKit TV Remote</h1>
@@ -12,10 +12,11 @@
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg" alt="HACS"></a>
   <a href="https://github.com/nikf86/homekit-tv-remote/releases"><img src="https://img.shields.io/github/release/nikf86/homekit-tv-remote.svg" alt="Release"></a>
+  <a href="https://github.com/nikf86/homekit-tv-remote"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote" alt="HACS installs"></a>
 </p>
 
 <p align="center">
-  <img src="docs/img/info-cycles-inputs.png" width="900" alt="The iOS remote widget and the saved input list">
+  <img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/info-cycles-inputs.png" width="900" alt="The iOS remote widget and the saved input list">
 </p>
 
 ---
@@ -76,7 +77,7 @@ Restart Home Assistant and pair the new accessory in Apple Home.
 
 Everything lives in one place: **Settings → Devices & Services → HomeKit TV Remote → Configure**. Changes take effect the moment you submit — no reload, no waiting.
 
-<p align="center"><img src="docs/img/menu.png" width="520" alt="Configure menu"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/menu.png" width="520" alt="Configure menu"></p>
 
 ### TV inputs
 
@@ -84,7 +85,7 @@ Your TV's real inputs, already listed. Tick the ones you want in Apple Home, the
 
 Not sure whether *HDMI 3* is the Xbox or the soundbar passthrough? Pick it under **Test** and submit — the TV switches to it and the form stays open. Nothing is saved while testing.
 
-<p align="center"><img src="docs/img/tvinputs.png" width="520" alt="TV inputs"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/tvinputs.png" width="520" alt="TV inputs"></p>
 
 There is nothing to type and no identifier numbers to look up. The integration reads each input's name and its HomeKit identifier straight from the accessory.
 
@@ -100,19 +101,19 @@ An input that drives another integration instead of the TV's own input switch.
 | **Switch TV to this input first** | Optional — when the TV must also change input, e.g. to the Apple TV's HDMI port |
 | **Test** | Fires it once without saving, and reports back in the form |
 
-<p align="center"><img src="docs/img/shortcut.png" width="520" alt="Add a shortcut"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/shortcut.png" width="520" alt="Add a shortcut"></p>
 
 > **There is no Apple TV switch any more.** When the target is a media player, the integration checks that entity's own `source_list` at the moment the shortcut runs: if your app name is in it, the app is launched with `select_source`; otherwise with `play_media`. That's correct for Apple TV, for Bravia, and for anything else, without you flagging it.
 
 ### Manage saved inputs
 
-<p align="center"><img src="docs/img/manage.png" width="520" alt="Manage saved inputs"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/manage.png" width="520" alt="Manage saved inputs"></p>
 
 **Rename** changes the label only. What the input does, and where it sits in the cycle, are untouched. The form comes back after each rename so you can do several.
 
 **Change the order** moves one input at a time — to the top, up one, down one, to the bottom. The list is renumbered every time, so you can keep nudging until it reads the way you want. This is the order the ⓘ button and the Next input button step through.
 
-<p align="center"><img src="docs/img/reorder.png" width="520" alt="Change the order"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/reorder.png" width="520" alt="Change the order"></p>
 
 **Remove** deletes inputs. Nothing is pre-ticked, so submitting as-is changes nothing.
 
@@ -236,7 +237,7 @@ Both debug switches take effect immediately, log at warning level so they need n
 
 ## Commands
 
-<p align="center"><img src="docs/img/hap_remote.png" width="560" alt="HAP command reference"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/nikf86/homekit-tv-remote/main/docs/img/hap_remote.png" width="560" alt="HAP command reference"></p>
 
 `remote.send_command` accepts all of the following. They are grouped by which HomeKit characteristic they actually write, because only the first group is `RemoteKey`.
 
