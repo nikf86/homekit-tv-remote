@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| Home Assistant | 2026.8 or later |
+| Home Assistant | 2026.3 or later |
 | Your TV | paired through the [HomeKit Device](https://www.home-assistant.io/integrations/homekit_controller/) integration |
 | For the iOS widget | [HomeKit Bridge](https://www.home-assistant.io/integrations/homekit/) configured |
 

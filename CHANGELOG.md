@@ -125,7 +125,9 @@ Inputs migrated from 1.x keep their old numeric identifier and show as `(migrate
 
 ### Requirements changed
 
-**Home Assistant 2026.8 or later.** The integration uses `OptionsFlowWithReload`, `AddConfigEntryEntitiesCallback` and `ConfigEntry.runtime_data`, and avoids `MediaPlayerState.STANDBY`, which 2026.8 removes. HACS will not offer this update to anyone on an older release.
+**Home Assistant 2026.3 or later.** The integration uses `OptionsFlowWithReload`, `AddConfigEntryEntitiesCallback` and `ConfigEntry.runtime_data`, all of which exist well before 2026.3, and it serves its own icon from `brand/`, which needs 2026.3. HACS will not offer this update to anyone on an older release.
+
+*(2.0.0 originally declared 2026.8. That was more conservative than necessary — nothing in the code requires it. Corrected in 2.4.0.)*
 
 ### If you installed manually
 
