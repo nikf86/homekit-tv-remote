@@ -15,6 +15,10 @@
   <a href="https://github.com/nikf86/homekit-tv-remote"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote" alt="HACS installs"></a>
 </p>
 
+<p align="center">
+  <img src="docs/img/info-cycles-inputs.png" width="900" alt="The iOS remote widget and the saved input list">
+</p>
+
 ---
 
 ## What it does
@@ -235,23 +239,45 @@ Both debug switches take effect immediately, log at warning level so they need n
 
 <p align="center"><img src="docs/img/hap_remote.png" width="560" alt="HAP command reference"></p>
 
-`remote.send_command` accepts any of these.
+`remote.send_command` accepts all of the following. They are grouped by which HomeKit characteristic they actually write, because only the first group is `RemoteKey`.
 
-| Command | Does |
-|---|---|
-| `up` `down` `left` `right` | D-pad |
-| `select` / `ok` / `enter` | Select |
-| `back` · `exit` | Back · Exit |
-| `play_pause` / `play` / `pause` | Play/pause |
-| `rewind` `fast_forward` `next_track` `previous_track` | Transport |
-| `info` · `home` · `settings` | Info · TV Home · TV Settings |
-| `volume_up` / `volume_down` | Volume (`vol_up` / `vol_down` also work) |
-| `mute` · `mute_on` · `mute_off` | Toggle · force on · force off |
-| `input:Apple TV` | Switch to a TV input **by name** |
-| `input_9` / `hdmi_9` | Switch to a TV input by HomeKit identifier |
-| `4` `5` `6` `7` `8` `9` `10` `11` `15` | Raw HAP RemoteKey values |
+### Written to `RemoteKey`
 
-Raw values: 0 rewind · 1 fast forward · 2 next · 3 previous · 4–7 up/down/left/right · 8 select · 9 back · 10 exit · 11 play/pause · 15 info. `14` (settings) and `16` (home) are vendor extensions — they work on Sony; TVs that don't know them ignore them.
+These are the TV's remote keys proper. Send the alias or the raw number — they are identical.
+
+| Alias | RemoteKey | Does |
+|---|---|---|
+| `rewind` | `0` | Rewind |
+| `fast_forward` | `1` | Fast forward |
+| `next_track` | `2` | Next |
+| `previous_track` | `3` | Previous |
+| `up` | `4` | D-pad up |
+| `down` | `5` | D-pad down |
+| `left` | `6` | D-pad left |
+| `right` | `7` | D-pad right |
+| `select` / `ok` / `enter` | `8` | Select |
+| `back` | `9` | Back |
+| `exit` | `10` | Exit |
+| `play_pause` / `play` / `pause` | `11` | Play/pause |
+| `settings` | `14` | TV settings menu — **vendor extension** |
+| `info` | `15` | Info |
+| `home` | `16` | TV home — **vendor extension** |
+
+`14` and `16` are outside the HAP RemoteKey enum. They work on Sony; TVs that don't recognise them ignore the write rather than erroring.
+
+### Written to other characteristics
+
+Not remote keys. These write a different characteristic on the accessory, so they behave differently and are unaffected by anything in the table above.
+
+| Command | Characteristic | Does |
+|---|---|---|
+| `volume_up` / `vol_up` | `VolumeSelector` | Volume up one step |
+| `volume_down` / `vol_down` | `VolumeSelector` | Volume down one step |
+| `mute` · `mute_on` · `mute_off` | `Mute` | Toggle · force on · force off |
+| `input:Apple TV` | `ActiveIdentifier` | Switch input **by name** |
+| `input_9` / `hdmi_9` | `ActiveIdentifier` | Switch input by HomeKit identifier |
+
+Power is not a command — use `remote.turn_on` / `remote.turn_off`, which write the `Active` characteristic.
 
 `mute` is optimistic: HomeKit doesn't report mute state back, so it toggles what the integration last sent. Use `mute_on` / `mute_off` where the result must be certain.
 
