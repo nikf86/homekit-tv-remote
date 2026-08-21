@@ -1,5 +1,5 @@
 """Shared constants for HomeKit TV Remote."""
-# Version: 2.1.1
+# Version: 2.4.0
 #
 # NEW IN 2.0.0 — this file did not exist before. Every platform file used to
 # redeclare DOMAIN and its own magic strings, which is how the option keys

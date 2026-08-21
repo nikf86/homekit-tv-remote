@@ -1,5 +1,5 @@
 """HomeKit TV Remote — integration entry point."""
-# Version: 2.1.1
+# Version: 2.4.0
 #
 # WHAT CHANGED FROM 1.0.3
 # - Config entry schema VERSION 1 → 2. async_migrate_entry() converts the old

@@ -1,14 +1,18 @@
 {
   "domain": "homekit_tv_remote",
   "name": "HomeKit TV Remote",
-  "codeowners": ["@nikf86"],
+  "codeowners": [
+    "@nikf86"
+  ],
   "config_flow": true,
-  "dependencies": ["homekit_controller"],
+  "dependencies": [
+    "homekit_controller"
+  ],
   "documentation": "https://github.com/nikf86/homekit-tv-remote",
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/nikf86/homekit-tv-remote/issues",
   "requirements": [],
   "single_config_entry": false,
-  "version": "2.3.2"
+  "version": "2.4.0"
 }

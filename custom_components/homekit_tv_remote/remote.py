@@ -1,5 +1,5 @@
 """Remote platform — the HAP command layer."""
-# Version: 2.1.1
+# Version: 2.4.0
 #
 # WHAT THIS FILE IS RESPONSIBLE FOR
 #   Sending. Every command that reaches the TV goes out from here, written
@@ -75,10 +75,20 @@ _LOGGER = logging.getLogger(__name__)
 
 # States of the HomeKit Device entity that mean "the TV is not on".
 # Everything else — on, playing, paused, idle, buffering — counts as on.
-OFF_STATES = {STATE_OFF, STATE_STANDBY, STATE_UNAVAILABLE, STATE_UNKNOWN, None}
+#
+# 2.4.0: unavailable and unknown are NOT in this set any more. They mean the
+# connection dropped, which is not the same as the TV being off, and Sony sets
+# drop their HAP session routinely. Treating a blip as OFF made this entity —
+# and the media_player beside it — flap, which in turn made HomeKit Bridge
+# write Active = 0 and iOS hide the D-pad. See _apply_hk_state.
+OFF_STATES = {STATE_OFF, STATE_STANDBY}
+
+# States that mean "we do not currently know", handled separately.
+UNKNOWN_STATES = {STATE_UNAVAILABLE, STATE_UNKNOWN, None}
 
 # HAP status codes, used to classify errors for the last_hap_error attribute.
 HAP_SUCCESS = 0
+HAP_UNKNOWN_ERROR = -1   # a failure we could not classify — still a failure
 HAP_ERRORS: dict[str, int] = {
     "timeout": -70408,
     "-70408": -70408,
@@ -337,9 +347,21 @@ class TVRemote(RemoteEntity):
         self._debug_listen = entry.options.get(OPT_DEBUG_LISTEN, False)
         self._debug_send = entry.options.get(OPT_DEBUG_SEND, False)
 
-        # Serialises everything except plain RemoteKey presses, which are fired
-        # and forgotten so rapid D-pad taps never queue behind each other.
+        # Paces multi-command sequences only. Single commands bypass it — see
+        # async_send_command.
         self._lock = asyncio.Lock()
+
+        # Every characteristic write goes through one queue drained by one
+        # worker. Callers never wait on the wire, but writes still reach the TV
+        # in the order they were made.
+        #
+        # 2.3.x fired a separate background task per press. That returned fast
+        # but gave no ordering — rapid taps raced each other onto the connection
+        # and could land reordered — and the try/except around task *creation*
+        # never saw an exception raised inside the task, so a failed write was
+        # silently recorded as a success.
+        self._queue: asyncio.Queue[tuple[tuple[int, int], Any, str]] = asyncio.Queue()
+        self._sender_task: asyncio.Task | None = None
 
     # ─── Logging ───────────────────────────────────────────────────────────────
 
@@ -359,7 +381,9 @@ class TVRemote(RemoteEntity):
                 self._last_error = code
                 _LOGGER.error("HAP %s during %s: %s", code, operation, error)
                 return
-        self._last_error = None
+        # Unrecognised, but still a failure. None would drop last_hap_error from
+        # the attributes entirely, making an error look like nothing happened.
+        self._last_error = HAP_UNKNOWN_ERROR
         _LOGGER.error("HAP error during %s: %s", operation, error)
 
     # ─── Properties ────────────────────────────────────────────────────────────
@@ -394,17 +418,78 @@ class TVRemote(RemoteEntity):
             async_track_state_change_event(self.hass, self._hk_entity_id, hk_changed)
         )
 
+        # One worker drains the write queue for the life of the entity.
+        self._ensure_sender()
+
         if (state := self.hass.states.get(self._hk_entity_id)) is not None:
             self._apply_hk_state(state, write=False)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Stop the sender so it does not outlive the entity."""
+        if self._sender_task is not None:
+            self._sender_task.cancel()
+            self._sender_task = None
+
+    # ─── The single write path ─────────────────────────────────────────────────
+
+    async def _sender(self) -> None:
+        """Drain the write queue, one write at a time, in order.
+
+        This is the only place put_characteristics is called for user-facing
+        commands. Errors are handled here because there is no caller left to
+        raise into by the time the write actually happens.
+        """
+        while True:
+            target, value, operation = await self._queue.get()
+            try:
+                await self._conn.put_characteristics([(*target, value)])
+                self._last_error = HAP_SUCCESS
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:  # noqa: BLE001 — aiohomekit raises many types
+                self._handle_error(err, operation)
+            finally:
+                self._queue.task_done()
+
+    def _ensure_sender(self) -> None:
+        """Start the sender if it is not already running.
+
+        Called from _write rather than only from async_added_to_hass. A queue
+        with no worker swallows every command silently, which is the same class
+        of failure the queue was introduced to remove — so the worker is started
+        on demand and restarted if it ever dies.
+        """
+        if self._sender_task is not None and not self._sender_task.done():
+            return
+        self._sender_task = self._entry.async_create_background_task(
+            self.hass, self._sender(), f"{DOMAIN} sender"
+        )
+
+    def _write(self, target: tuple[int, int] | None, value: Any, operation: str) -> bool:
+        """Queue one characteristic write. Returns immediately."""
+        if target is None:
+            return False
+        self._ensure_sender()
+        self._queue.put_nowait((target, value, operation))
+        return True
 
     @callback
     def _apply_hk_state(self, hk_state, write: bool = True) -> None:
         """Copy power and current input across from the HomeKit Device entity.
 
-        Power: anything other than off/unavailable/unknown counts as on, so a TV
-        reporting "playing" or "paused" is correctly on. 1.x compared against
-        the literal string "on" and got this wrong.
+        Power: anything other than off/standby counts as on, so a TV reporting
+        "playing" or "paused" is correctly on. 1.x compared against the literal
+        string "on" and got this wrong.
+
+        Unreachable is not off. When the HomeKit Device entity goes unavailable
+        or unknown we hold whatever we last knew rather than asserting OFF, and
+        we leave the input alone — the source attribute is absent during a blip,
+        and treating that as "the TV moved" is wrong.
         """
+        if hk_state.state in UNKNOWN_STATES:
+            self._log_listen("HomeKit Device unreachable — holding last state")
+            return
+
         changed = False
 
         is_on = hk_state.state not in OFF_STATES
@@ -476,71 +561,59 @@ class TVRemote(RemoteEntity):
     # ─── Volume and mute ───────────────────────────────────────────────────────
 
     async def async_set_mute(self, mute: bool) -> None:
-        """Write an explicit mute state — no read-back round trip.
+        """Queue an explicit mute state — no read-back round trip.
 
         The HomeKit Device entity does not expose mute, so this value is
         optimistic: it is what we last told the TV, not what the TV reports.
         Use mute_on / mute_off rather than mute in automations if you need the
         result to be deterministic.
+
+        The flag is set here, on the caller's stack, rather than in the sender.
+        That keeps a rapid mute_on / mute_off pair in the order it was issued
+        even though the writes are dispatched asynchronously.
         """
-        try:
-            if self._acc.mute is not None:
-                self._log_send("Mute = %s", mute)
-                await self._conn.put_characteristics([(*self._acc.mute, mute)])
-            elif self._acc.volume is not None:
-                # Non-standard, but some TVs read VolumeSelector 2 as mute.
-                self._log_send("Mute via VolumeSelector fallback")
-                await self._conn.put_characteristics(
-                    [(*self._acc.volume, VOLUME_MUTE_FALLBACK)]
-                )
-            else:
-                _LOGGER.warning("TV exposes neither Mute nor VolumeSelector")
-                return
-            self._muted = mute
-            self._last_error = HAP_SUCCESS
-            self.async_write_ha_state()
-        except Exception as err:  # noqa: BLE001
-            self._handle_error(err, "mute")
+        if self._acc.mute is not None:
+            target, value = self._acc.mute, mute
+            self._log_send("Mute = %s", mute)
+        elif self._acc.volume is not None:
+            # Non-standard, but some TVs read VolumeSelector 2 as mute.
+            target, value = self._acc.volume, VOLUME_MUTE_FALLBACK
+            self._log_send("Mute via VolumeSelector fallback")
+        else:
+            _LOGGER.warning("TV exposes neither Mute nor VolumeSelector")
+            return
+
+        self._muted = mute
+        self.async_write_ha_state()
+        self._write(target, value, "mute")
 
     async def _write_volume(self, direction: int) -> None:
         if self._acc.volume is None:
             _LOGGER.warning("TV exposes no VolumeSelector characteristic")
             return
-        try:
-            self._log_send("VolumeSelector = %s", direction)
-            await self._conn.put_characteristics([(*self._acc.volume, direction)])
-            self._last_error = HAP_SUCCESS
-        except Exception as err:  # noqa: BLE001
-            self._handle_error(err, "volume")
+        self._log_send("VolumeSelector = %s", direction)
+        self._write(self._acc.volume, direction, "volume")
 
     # ─── Button presses ────────────────────────────────────────────────────────
 
-    async def _press(self, key: int, hold_secs: float = 0) -> None:
-        """Write a RemoteKey value.
+    async def _press(self, key: int, **_: Any) -> None:
+        """Queue a RemoteKey write.
 
-        Instant presses are fired as a background task so the caller returns
-        immediately and rapid taps never queue. 1.x used asyncio.ensure_future
-        here, which leaves the task unreferenced and eligible for garbage
-        collection mid-flight — occasionally a press just vanished.
-        async_create_background_task keeps a reference and ties the task to the
-        Home Assistant lifecycle.
+        Returns as soon as the press is queued, so rapid D-pad taps never wait
+        on the wire — but the queue preserves order, so five arrows arrive as
+        five arrows in the order they were pressed.
+
+        hold_secs is accepted and ignored. HAP's RemoteKey characteristic is a
+        single write of an enum value: there is no press/release pair and no
+        duration, so there is nothing underneath it to hold. 2.3.x slept locally
+        for the duration, which delayed the caller and never reached the TV, and
+        as a side effect pushed the press off the fast path.
         """
         if self._acc.remote_key is None:
+            _LOGGER.warning("TV exposes no RemoteKey characteristic")
             return
-        try:
-            if hold_secs > 0:
-                self._log_send("RemoteKey %s (hold %.1fs)", key, hold_secs)
-                await self._conn.put_characteristics([(*self._acc.remote_key, key)])
-                await asyncio.sleep(hold_secs)
-            else:
-                self._log_send("RemoteKey %s", key)
-                self.hass.async_create_background_task(
-                    self._conn.put_characteristics([(*self._acc.remote_key, key)]),
-                    name=f"{DOMAIN} remote key {key}",
-                )
-            self._last_error = HAP_SUCCESS
-        except Exception as err:  # noqa: BLE001
-            self._handle_error(err, f"button press {key}")
+        self._log_send("RemoteKey %s", key)
+        self._write(self._acc.remote_key, key, f"button press {key}")
 
     # ─── Command dispatch ──────────────────────────────────────────────────────
 
@@ -548,16 +621,21 @@ class TVRemote(RemoteEntity):
         """Handler for remote.send_command."""
         commands = [str(item) for item in command]
         hold_secs = float(kwargs.get("hold_secs", 0) or 0)
+        if hold_secs:
+            _LOGGER.debug(
+                "hold_secs is ignored: HomeKit's RemoteKey characteristic has no "
+                "press-and-hold. Use delay_secs to pace a sequence"
+            )
         delay_secs = float(kwargs.get("delay_secs", 0.05) or 0)
 
-        # A single instant key press skips the lock entirely — that is the whole
-        # point of the fast path. Everything else is serialised.
-        if (
-            len(commands) == 1
-            and not hold_secs
-            and (key := self._as_key(commands[0])) is not None
-        ):
-            await self._press(key)
+        # Nothing in the key / volume / mute path waits on the wire any more —
+        # they queue and return — so the lock's only remaining job is pacing a
+        # multi-command sequence. A single command skips it entirely.
+        #
+        # hold_secs no longer disqualifies the fast path, because it no longer
+        # does anything (see _press).
+        if len(commands) == 1:
+            await self._dispatch(commands[0], hold_secs)
             return
 
         async with self._lock:
@@ -580,7 +658,7 @@ class TVRemote(RemoteEntity):
         lowered = text.lower()
 
         if (key := self._as_key(text)) is not None:
-            await self._press(key, hold_secs)
+            await self._press(key)
             return
 
         if lowered in ("volume_up", "vol_up"):

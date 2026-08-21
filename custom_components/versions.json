@@ -1,0 +1,197 @@
+{
+  "_note": "2.x entries are marked pending_confirmation. Per the project rule, remove that flag once you have confirmed the change works on your setup.",
+  "const.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "2.0.0": "New file. Single home for DOMAIN, the option keys, the input-dict field names, the HAP RemoteKey values, the command aliases and the iOS widget key map. Previously every platform file redeclared DOMAIN and its own magic strings, which is how option keys drifted apart between switch.py, button.py and media_player.py.",
+      "2.1.0": "Added DOCS_URL, the single source for the documentation link used by the Manual step and mirrored in manifest.json.",
+      "2.1.1": "Housekeeping: removed DATA_REMOTE_ENTITY / DATA_MEDIA_ENTITY / DATA_REMOTE_REF / DATA_MEDIA_REF. Left over from the hass.data era and referenced by nothing since runtime_data replaced them in 2.0.0.",
+      "2.3.1": "Removed DOCS_URL along with the Manual step. The documentation URL lives only in manifest.json.",
+      "2.4.0": "Version bump only."
+    }
+  },
+  "__init__.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. Loads all platforms, registers async_reload_entry listener.",
+      "1.0.1": "Added _slugify() helper. Stores remote_entity and media_player_entity in hass.data derived from tv_name so all platforms use correct entity IDs regardless of the name chosen during setup.",
+      "1.0.2": "Attempted to guard async_reload_entry against non-custom_inputs writes. Did not work reliably due to race conditions.",
+      "1.0.3": "Removed update listener entirely. Listener fired on every async_update_entry call including Include switch toggles, causing a full reload that wiped homekit_inputs immediately after it was written. Reloads are now triggered explicitly by button.py after saving or deleting inputs only.",
+      "2.0.0": "Config entry schema VERSION 1 to 2 with async_migrate_entry(): custom_inputs + homekit_inputs are folded into one options['inputs'] list, nothing lost. Platforms TEXT, SELECT and SENSOR dropped. Registry allow-list sweep removes the entities those platforms left behind so no Unavailable ghosts remain. hass.data replaced by a typed entry.runtime_data dataclass, which HA drops on unload. Still no update listener: the options flow owns reloading via OptionsFlowWithReload, which is the clean version of what 1.0.2 attempted.",
+      "2.0.1": "Added _warn_if_translations_missing(): logs an error at setup if translations/en.json is absent. HA only loads a custom integration's text when a translations directory exists at the top level of the integration folder, and it caches that check for the whole run \u2014 miss the folder and the Configure dialog is blank with no error anywhere.",
+      "2.0.2": "Replaced the 2.0.1 file-existence warning with _log_translation_diagnostics(), run as a background task after setup. It asks HA's own translation cache how many option strings it holds for this integration and lists the files in the integration folder, which separates the three causes of a blank Configure dialog: folder missing, folder added mid-run (needs a full restart, the os.listdir is taken once per run), or backend fine and the browser caching an old translation set.",
+      "2.1.0": "Translation diagnostics now log at debug on success and only raise an error when zero option strings loaded, so a healthy install is silent.",
+      "2.1.1": "_async_remove_stale_entities now uses the indexed er.async_entries_for_config_entry instead of scanning registry.entities.values(). The scan walked every entity in Home Assistant on every setup and reload to find at most six. Migration uses contextlib.suppress for the identifier coercion.",
+      "2.4.0": "Version bump only."
+    }
+  },
+  "config_flow.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. Scans entity registry for homekit_controller media_player entities, presents dropdown and tv_name field, creates config entry.",
+      "2.0.0": "VERSION = 2. Added the options flow that replaces 15+ config entities: a menu with TV inputs (checkbox list auto-filled from the TV's real inputs), Add shortcut (name, target entity, what to send, optional TV input to switch to first, and a Test box that fires it without saving), and Manage saved inputs (review and remove). Built on OptionsFlowWithReload so saving reloads the entry and the integration needs no update listener.",
+      "2.0.1": "Blank Configure dialog fix. Removed the {status} and {count} description placeholders: a translated description containing a token the frontend cannot fill is localized to an empty string, which silently blanks the step. Test results now come back through errors.base against plain options.error.test_sent / test_failed strings, with the detail in the log. Dropped the unused __init__ (no base class defines one).",
+      "2.0.2": "Menu labels no longer depend on translations. The frontend branches on Array.isArray(step.menu_options): a list is looked up as options.step.init.menu_options.<key> and renders a blank row on a miss, while a dict is used verbatim. Switched to the dict form so the only navigable screen in the integration cannot come up as three empty rows.",
+      "2.1.0": "Menu restored to the list form (two-line rows with descriptions) and a Manual entry added. Every step now applies its change with async_update_entry and returns to the menu instead of ending the flow \u2014 media_player.py reads options['inputs'] live, so nothing needs a reload and the dialog no longer closes after every edit. TV inputs gained a Test dropdown that switches the TV to one of its own inputs without saving. Manage became a submenu: Rename (label only, order and behaviour untouched), Change the order (move one input top/up/down/bottom, list renumbered each time), Remove.",
+      "2.2.0": "Added a HAP commands step to the menu: the full command reference drawn as inline SVG. Home Assistant renders step descriptions through <ha-markdown allow-svg breaks>, so an inline <svg> is the one route to real shapes and colour inside the integration's own UI. Passed as a description placeholder rather than written into strings.json, so the artwork lives in one place and translators never see 13 KB of path data.",
+      "2.3.0": "Removed the HAP commands step. Home Assistant's markdown sanitiser allows only <svg xmlns width height> containing <path d transform stroke> plus <img src> \u2014 no viewBox, no fill, and circle/rect/text/g/defs are not allowed tags at all. The drawing came through as two stray path fragments. It lives in the manual, where it renders properly.",
+      "2.3.1": "FIXED: a saved shortcut or input did not appear in the source list until the TV next changed state, sometimes half an hour later. _apply wrote the options but never published a new state. source_list is a property reading options live, so the data was correct immediately, but Home Assistant only sends a new state when async_write_ha_state() is called and nothing called it \u2014 the media player otherwise writes state only when the TV changes. Before 2.1.0 the flow ended and the entry reloaded, which rebuilt the entities and hid the omission. _apply now publishes after every write. Also removed the Manual step: manifest.json's documentation field already puts the same link behind the ? icon in every dialog and under Documentation in the integration menu.",
+      "2.3.2": "Ticking a TV input whose name matches a saved shortcut is refused. The shortcut form already blocked the reverse; without this you could end up with two entries sharing a name, a source_list containing duplicates, and select_source picking whichever came first.",
+      "2.4.0": "Version bump only."
+    }
+  },
+  "remote.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. Core HAP communication layer. Connects to TV via homekit_controller pairing, scans for RemoteKey/Active/VolumeSelector/ActiveIdentifier/Mute characteristics, polls and subscribes to ActiveIdentifier, dispatches all HAP commands.",
+      "1.1.0": "Fire and forget for RemoteKey button presses. Lock skipped for single integer commands.",
+      "1.2.0": "Replaced HAP polling and push subscription with HK Controller media_player state listener. Identifier derived as source_list.index(source) + 1.",
+      "1.2.1": "Bug fix: _update_from_hk_state was missing async_write_ha_state() in the power-state branch.",
+      "2.0.0": "Removed the last three queries to the TV. (1) mute no longer does a get_characteristics read before writing; state is tracked locally and written explicitly, and mute_on / mute_off were added for deterministic automations. (2) Input identifiers are read from the accessory's INPUT_SOURCE services (CONFIGURED_NAME + IDENTIFIER) instead of being guessed as source_list position + 1, which was wrong on any TV that does not number inputs 1..N; the resulting name to identifier map is published on runtime_data and is what removed the manual HAP Identifier field. (3) is_on now treats playing/paused/idle as on and off/standby/unavailable/unknown as off; 1.x compared against the literal string 'on' and reported a playing TV as off. Also: asyncio.ensure_future replaced by hass.async_create_background_task so fired-and-forgotten key presses cannot be garbage collected mid-flight; TELEVISION service resolved exactly via the HomeKit Device entity's unique_id with the 1.x brute-force scan kept as fallback; friendly command aliases (up, down, left, right, select, back, exit, home, settings, play_pause, rewind, fast_forward, next_track, previous_track) and 'input:<Name>' added alongside the raw integers and input_N.",
+      "2.1.1": "Collapsed the nested condition in the send_command fast path into one expression. No behaviour change.",
+      "2.4.0": "Ordered send queue replaces the task-per-write model. Fixes three faults: (1) the try/except wrapped task creation, not the write, so a failed put_characteristics was swallowed and _last_error was still set to HAP_SUCCESS; (2) one task per press gave no ordering, so rapid D-pad taps could reach the TV out of order; (3) volume and mute awaited the wire while holding the lock. The worker starts on demand, so a command before async_added_to_hass is not lost. OFF_STATES no longer contains unavailable/unknown \u2014 unreachable is not off. hold_secs is accepted and ignored (HAP RemoteKey has no press-and-hold); it no longer blocks the fast path. Unclassified HAP errors record -1 instead of None, which previously dropped last_hap_error from the attributes entirely."
+    }
+  },
+  "media_player.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. Bridges iOS HomeKit remote key events to HAP commands.",
+      "1.1.0": "Added media_player_source command_type for Apple TV app launching.",
+      "1.2.0": "media_player_source supports optional third |input_N segment.",
+      "1.3.0": "Stores self in hass.data so NextSavedInputButton can call _cycle_custom_inputs().",
+      "1.4.0": "Added _included_inputs() helper filtering custom_inputs by options[homekit_inputs].",
+      "1.4.1": "Restored _included_inputs(), media_player_entity_ref store and filtered cycle after a regression.",
+      "1.5.0": "Removed blocking=True from fire-and-forget service calls.",
+      "1.5.1": "Reverted blocking=False back to blocking=True.",
+      "2.0.0": "State and current input read straight from the HomeKit Device entity instead of via the remote entity's attributes, so the same fact is no longer copied twice and cannot disagree with itself. state is a MediaPlayerState enum; standby maps to OFF because MediaPlayerState.STANDBY is removed in HA 2026.8. The Include-switch layer is gone: options['inputs'] is the list. The Apple TV special case is gone: select_source vs play_media is decided at run time by checking whether the app name is in the target entity's own source_list, which works for Apple TV, Bravia and anything else. Input cycling now starts from the input that is actually active rather than a private counter that drifted whenever the input changed by other means. Power, volume and playback call the remote entity directly instead of round-tripping through hass.services. All input execution lives in one method, async_run_input, which the options flow's Test box also calls.",
+      "2.1.0": "FIXED: the \u24d8 Info button and Next input went unresponsive for several seconds after running a shortcut. The whole chain awaited async_run_input, which awaited a blocking media_player.select_source \u2014 an Apple TV app launch does not return until the app is up, and for that entire window the button sat disabled and further presses did nothing. async_cycle_input now picks the next input and returns immediately, dispatching the command as a background task, and third-party service calls default to blocking=False (the options-flow Test passes blocking=True so failures still surface). Cycling also re-anchors on the live input only after CYCLE_RESYNC_SECONDS of quiet \u2014 during rapid presses the TV still reports the old input, and re-reading it handed back the same target twice, which itself looked like a stuck button.",
+      "2.3.2": "Review fixes. (1) source reported the wrong input, or none, after selecting a shortcut: the TV only knows its own inputs, so launching an app left the card showing the HDMI name or blank. The entry last run is now remembered and reported, and dropped the moment the TV moves somewhere that contradicts it \u2014 a power change alone does not count. (2) is_volume_muted is read through to the remote instead of mirrored, so remote.send_command 'mute' no longer leaves the media card disagreeing. (3) A key press with no remote entity logged nothing; it now says so.",
+      "2.4.0": "An unavailable or unknown HomeKit Device entity no longer reports OFF. It made HomeKit Bridge write Active = 0, and iOS hides the D-pad on an inactive TV accessory, so the arrows vanished and reappeared on every reconnect. The missing source attribute during a blip also cleared the remembered input via _forget_active_if_contradicted. Both now hold their last known value. _state starts as None so a first-ever unknown is distinguishable from a blip."
+    }
+  },
+  "button.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. ReloadHomeKitButton, TestCommandButton, AddCustomInputButton, DeleteCustomInputButton.",
+      "1.1.0": "AddCustomInputButton reads AppleTVAppSwitch state.",
+      "1.2.0": "AddCustomInputButton reads AppleTVInputSwitch state.",
+      "1.3.0": "Added NextSavedInputButton.",
+      "1.4.0": "DeleteCustomInputButton also removes the deleted input from homekit_inputs.",
+      "1.5.0": "TestCommandButton rewritten as CONFIG, reads the same fields as Save Input.",
+      "1.5.1": "Add and Delete call async_reload explicitly.",
+      "1.6.0": "Added ApplyChangesButton, removed automatic reloads.",
+      "1.7.0": "Merged ApplyChangesButton into ReloadHomeKitButton.",
+      "2.0.0": "Down from five buttons to two. Test Command, Save Input and Delete Last Input are now steps in the Configure dialog. Reload HomeKit no longer reloads the integration first, because the options flow already did: it is now purely a homekit.reload, and logs a clear error if HomeKit Bridge is not set up. Next Saved Input renamed to Next input but keeps its 1.x unique_id so the entity, its entity_id and its history survive the upgrade.",
+      "2.4.0": "Version bump only."
+    }
+  },
+  "switch.py": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. DebugListenSwitch, DebugSendSwitch, AppleTVSwitch.",
+      "1.1.0": "Renamed AppleTVSwitch to AppleTVAppSwitch. Added AppleTVInputSwitch.",
+      "1.2.0": "Version alignment only.",
+      "1.3.0": "Added HomeKitInputSwitch: one persistent switch per saved input.",
+      "1.3.1": "Fixed _update_options stale config entry bug.",
+      "1.3.5": "Removed automatic async_write_ha_state and async_reload from Include switch toggles.",
+      "2.0.0": "Only the two debug switches remain. The Apple TV App and Apple TV Input switches are gone because that choice is now detected automatically, and the per-input Include switches are gone because options['inputs'] is the list of included inputs. Both remaining switches keep their 1.x unique_ids and behaviour: flip the flag on the live remote entity for immediate effect, persist to options, and deliberately do not reload. Collapsed into one parameterised DebugSwitch class instead of two near-identical ones.",
+      "2.4.0": "Version bump only."
+    }
+  },
+  "text.py": {
+    "version": "REMOVED in 2.0.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. ConfigTextEntity fields for input configuration. CurrentIdentifierTextEntity displays active TV input.",
+      "1.0.1": "CurrentIdentifierTextEntity reads remote entity ID from hass.data.",
+      "1.1.0": "Removed the separate test_command field; CurrentIdentifierTextEntity moved to CONFIG as 1i.",
+      "REMOVED": "Delete this file. The five text fields are now form fields in the Configure dialog. 1i. Current Identifier is obsolete: identifiers are read from the accessory automatically, so there is no number left to look up."
+    }
+  },
+  "select.py": {
+    "version": "REMOVED in 2.0.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. InputTypeSelectEntity dropdown populated from all remote.* and media_player.* entities in HA.",
+      "REMOVED": "Delete this file. Replaced by an entity selector in the Configure dialog, which is filtered by Home Assistant itself and always current \u2014 the old dropdown was built once at setup and went stale until the next reload."
+    }
+  },
+  "sensor.py": {
+    "version": "REMOVED in 2.0.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.0.0": "Initial release. Creates one SavedInputSensor per entry in custom_inputs, with orphan cleanup on reload.",
+      "REMOVED": "Delete this file. Configure \u2192 Manage saved inputs shows the same information, and the media player's source_list attribute exposes it to automations."
+    }
+  },
+  "manifest.json": {
+    "version": "2.4.0",
+    "pending_confirmation": true,
+    "history": {
+      "1.5.0": "Version at the time of the 1.x line.",
+      "2.0.0": "Filled in documentation and issue_tracker (an empty documentation URL trips HA's manifest validation), added codeowners and integration_type: device.",
+      "2.0.2": "Version bump.",
+      "2.1.0": "Version bump.",
+      "2.2.0": "Version bump.",
+      "2.2.1": "Version bump.",
+      "2.3.0": "Version bump.",
+      "2.3.1": "Version bump.",
+      "2.3.2": "Version bump.",
+      "2.4.0": "Version 2.4.0."
+    }
+  },
+  "hacs.json": {
+    "version": "2.0.0",
+    "pending_confirmation": true,
+    "history": {
+      "2.0.0": "Minimum Home Assistant raised to 2026.8.0. Required: OptionsFlowWithReload, AddConfigEntryEntitiesCallback and ConfigEntry.runtime_data are all used, and MediaPlayerState.STANDBY is avoided because it is removed in that release."
+    }
+  },
+  "strings.json": {
+    "version": "2.3.2",
+    "pending_confirmation": true,
+    "history": {
+      "2.0.0": "Added the whole options section: menu labels, three step titles and descriptions, three validation errors and two aborts. Copied to translations/en.json, which is the file Home Assistant actually loads for a custom integration.",
+      "2.0.1": "Removed both description placeholders. Added data_description helper text for every field, and menu_option_descriptions for the three menu entries, so each step explains itself in the dialog. Added test_sent / test_failed error strings.",
+      "2.1.0": "Steps for rename, reorder, remove and manual; manage turned into a submenu; test_input added to tv_inputs; renamed / reordered confirmations; nothing_to_reorder abort; selector.direction option labels.",
+      "2.2.0": "hap_commands step and menu entry. Its description carries a {remote} slot filled from remote_art.py.",
+      "2.3.0": "Every title, label and description rewritten shorter and more direct. No sales copy, no restating what a field obviously does, one line where one line will do.",
+      "2.3.1": "Manual step and menu entry removed.",
+      "2.3.2": "Added the name_clash error."
+    }
+  },
+  "README.md": {
+    "version": "2.3.2",
+    "pending_confirmation": true,
+    "history": {
+      "2.1.0": "Rewritten as a showcase: rendered dialog illustrations, a full worked Apple TV example with common app names and how to get exact ones, worked examples for Bravia and Android TV, and a table of which TV brands ship HomeKit with the best Home Assistant integration for each.",
+      "2.2.0": "Command section now leads with the drawn remote.",
+      "2.2.1": "Header icon points at custom_components/homekit_tv_remote/brand/icon.png, the folder Home Assistant actually serves from.",
+      "2.3.0": "Dropped the pointer to the removed HAP commands step; the drawing stays in the command section.",
+      "2.3.2": "hold_secs is no longer described as a long press. HAP's RemoteKey is a single event with no press-and-release pair, so nothing is held \u2014 the key is sent once and hold_secs waits afterwards."
+    }
+  },
+  "brand/": {
+    "version": "2.2.1",
+    "pending_confirmation": true,
+    "history": {
+      "2.2.1": "The repo-root brands/ folder is deleted and the icons live only in custom_components/homekit_tv_remote/brand/. Since Home Assistant 2026.3 a custom integration serves its own brand images through the Brands Proxy API (/api/brands/integration/<domain>/icon.png), local images take priority over the CDN, and the custom_integrations folder in home-assistant/brands is marked legacy in that repo's own README. A pull request there gets closed unmerged. Earlier 2.0.x packages wrongly removed brand/ \u2014 that, not a missing brands PR, is why the integration page showed 'icon not available'."
+    }
+  },
+  "verify.py": {
+    "history": {
+      "2.3.1": "Added section 9: saving, renaming and removing an input must publish a new state. Verified to fail when the fix is reverted.",
+      "2.3.2": "Tests for all of the above, including that a real TV move clears the remembered selection while a state change alone does not.",
+      "2.4.0": "Section 10 added: ordering under rapid presses, failed writes surfacing rather than recording success, hold_secs being inert, and unreachable-is-not-off for both entities. Timing waits in the command-routing section changed from sleep(0) to queue.join(), which is deterministic now that writes are queued."
+    },
+    "version": "2.4.0",
+    "pending_confirmation": true
+  }
+}

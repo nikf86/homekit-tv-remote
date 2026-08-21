@@ -1,5 +1,61 @@
 # Changelog
 
+## 2.4.0 — bug fixes
+
+No new features. Four faults found during a full review, all of which could
+silently drop or misreport a command.
+
+### The D-pad disappearing from the iOS remote
+
+An unavailable or unknown HomeKit Device entity was reported as **off**. Sony
+sets drop their HAP session routinely, and Home Assistant restarts pass through
+unknown, so this happened often. Home Assistant's HomeKit Bridge translated it
+to `Active = 0`, and iOS hides the D-pad on an inactive TV accessory — so the
+arrows vanished and came back on every blip, or failed to appear until the
+connection recovered.
+
+Unreachable is no longer treated as off, in either entity. The last known state
+is held and corrects itself when the connection returns.
+
+The same blip also cleared the remembered input, because the `source` attribute
+is absent while unavailable and that read as "the TV moved somewhere else".
+Fixed alongside.
+
+### Failed writes recorded as successes
+
+`_press` wrapped `try/except` around *creating* the background task, not around
+the write. Any exception inside `put_characteristics` — timeout, disconnected,
+HAP error — was raised inside the task and never reached the error handler,
+while `_last_error` was set to `HAP_SUCCESS` regardless. A dropped press
+produced no error, no log line and no attribute change.
+
+### No ordering guarantee on rapid presses
+
+One background task per press meant five rapid arrows were five concurrent
+writes racing onto the connection, and could arrive reordered.
+
+Both are fixed by a single send queue drained by one worker. Callers still
+return immediately, order is preserved, and errors surface. Volume and mute now
+use the same queue, so they no longer block on the wire while holding the lock.
+
+### hold_secs did nothing
+
+It wrote the characteristic once and then slept locally, delaying the caller
+without reaching the TV — and, as a side effect, disqualified the press from the
+fast path. HAP's RemoteKey characteristic is a single write of an enum value:
+there is no press/release pair and no duration. It is now accepted and ignored,
+with a debug line. Use `delay_secs` to pace a sequence.
+
+### Also
+
+- An unclassified HAP error records `-1` instead of `None`. `None` dropped
+  `last_hap_error` from the attributes entirely, making a failure look like
+  nothing had happened.
+- The send worker starts on demand, so a command issued before
+  `async_added_to_hass` is not lost.
+- `verify.py` gains section 10, covering all of the above.
+
+
 ## 2.3.0
 
 - Removed the **HAP commands** step. Home Assistant's markdown sanitiser strips almost all of an inline SVG — no `viewBox`, no `fill`, and `circle`/`rect`/`text` are not allowed tags — so the drawing arrived as a couple of stray fragments. It lives in the manual instead, where it renders properly.

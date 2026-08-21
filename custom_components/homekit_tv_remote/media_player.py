@@ -135,7 +135,9 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
             model="HAP Television Remote",
         )
 
-        self._state = MediaPlayerState.OFF
+        # None means "nothing known yet", which is what lets _apply_hk_state
+        # tell a first-ever unknown apart from a connection blip.
+        self._state: MediaPlayerState | None = None
         self._tv_source: str | None = None    # raw HomeKit input name
         self._cycle_index = 0
         self._last_cycle = 0.0                # loop clock of the last cycle step
@@ -213,7 +215,7 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
 
     @property
     def state(self) -> MediaPlayerState:
-        return self._state
+        return self._state if self._state is not None else MediaPlayerState.OFF
 
     @property
     def is_volume_muted(self) -> bool:
@@ -271,10 +273,25 @@ class HomeKitTVMediaPlayer(MediaPlayerEntity):
     def _apply_hk_state(self, hk_state, write: bool = True) -> None:
         """Copy state and current input across from the HomeKit Device entity."""
         raw = hk_state.state
+
         if raw in (STATE_UNAVAILABLE, STATE_UNKNOWN, None):
-            new_state = MediaPlayerState.OFF
-        else:
-            new_state = HK_STATE_MAP.get(raw, MediaPlayerState.ON)
+            # Unreachable is not off. Sony sets drop their HAP session routinely,
+            # and Home Assistant restarts pass through unknown. Asserting OFF
+            # here made HomeKit Bridge write Active = 0, and iOS hides the D-pad
+            # on an inactive TV accessory — so the arrows vanished and came back
+            # on every blip. The source attribute is absent during a blip too,
+            # so fall through without touching the remembered input: a missing
+            # source is not the TV moving somewhere else.
+            #
+            # Hold whatever we last knew. It self-corrects the moment the
+            # HomeKit Device entity recovers.
+            if self._state is None:
+                self._state = MediaPlayerState.OFF
+                if write:
+                    self.async_write_ha_state()
+            return
+
+        new_state = HK_STATE_MAP.get(raw, MediaPlayerState.ON)
         if raw == STATE_OFF:
             new_state = MediaPlayerState.OFF
 
