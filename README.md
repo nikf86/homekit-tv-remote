@@ -12,7 +12,6 @@
 <p align="center">
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-orange.svg" alt="HACS"></a>
   <a href="https://github.com/nikf86/homekit-tv-remote/releases"><img src="https://img.shields.io/github/release/nikf86/homekit-tv-remote.svg" alt="Release"></a>
-  <a href="https://github.com/nikf86/homekit-tv-remote"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Flauwbier.nl%2Fhacs%2Fnikf86%2Fhomekit-tv-remote" alt="HACS installs"></a>
 </p>
 
 <p align="center">
